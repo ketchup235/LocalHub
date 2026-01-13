@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LocalHub - Discover Your Community</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <!-- 3D Hero Canvas -->
+    <div id="hero-container">
+      <canvas id="hero-canvas"></canvas>
+      <div id="hero-overlay">
+        <nav id="main-nav">
+          <div class="nav-brand">LocalHub</div>
+          <div class="nav-links">
+            <a href="#explore" class="nav-link">Explore</a>
+            <a href="#deals" class="nav-link">Deals</a>
+            <a href="#bookmarks" class="nav-link">Saved</a>
+          </div>
+        </nav>
+        <div id="hero-content">
+          <h1>Discover Local</h1>
+          <p>Support small businesses in your community</p>
+          <button id="explore-btn" class="btn-primary">Start Exploring</button>
+        </div>
+        <div id="cursor-follower"></div>
+        <div id="interaction-hint">Hover & click the floating shapes</div>
+        <div id="object-label"></div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <main id="main-content">
+      <!-- Search & Filter Section -->
+      <section id="explore" class="section">
+        <div class="section-header">
+          <h2>Find Local Businesses</h2>
+          <div class="search-container">
+            <input
+              type="text"
+              id="search-input"
+              placeholder="Search businesses..."
+            />
+            <button id="search-btn" class="btn-icon">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="filters">
+          <div class="category-filters">
+            <button class="filter-btn active" data-category="all">All</button>
+            <button class="filter-btn" data-category="food">
+              Food & Dining
+            </button>
+            <button class="filter-btn" data-category="retail">Retail</button>
+            <button class="filter-btn" data-category="services">
+              Services
+            </button>
+          </div>
+          <div class="sort-container">
+            <label for="sort-select">Sort by:</label>
+            <select id="sort-select">
+              <option value="rating">Top Rated</option>
+              <option value="reviews">Most Reviewed</option>
+              <option value="name">Name (A-Z)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="businesses-grid" class="businesses-grid"></div>
+      </section>
+
+      <!-- Deals Section -->
+      <section id="deals" class="section">
+        <h2>Special Deals & Coupons</h2>
+        <div id="deals-container" class="deals-container"></div>
+      </section>
+
+      <!-- Bookmarks Section -->
+      <section id="bookmarks" class="section">
+        <h2>Your Saved Businesses</h2>
+        <div id="bookmarks-container" class="businesses-grid"></div>
+        <p id="no-bookmarks" class="empty-state">
+          No saved businesses yet. Click the bookmark icon on any business to
+          save it!
+        </p>
+      </section>
+    </main>
+
+    <!-- Business Detail Modal -->
+    <div id="business-modal" class="modal">
+      <div class="modal-content">
+        <button class="modal-close">&times;</button>
+        <div id="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Verification Modal -->
+    <div id="verification-modal" class="modal">
+      <div class="modal-content verification-content">
+        <h3>Quick Verification</h3>
+        <p>Please solve this simple math problem to verify you're human:</p>
+        <div class="captcha-container">
+          <span id="captcha-question"></span>
+          <span>=</span>
+          <input type="text" id="captcha-input" placeholder="?" />
+        </div>
+        <button id="verify-btn" class="btn-primary">Verify</button>
+        <p id="captcha-error" class="error-text"></p>
+      </div>
+    </div>
+
+    <!-- Using r128 which has proper CDN support for all files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="{{ url_for('static', filename='js/hero3d.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  </body>
+</html>

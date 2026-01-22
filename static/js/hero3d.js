@@ -1,7 +1,7 @@
 // Advanced 3D Hero Scene - Self-contained with r128 compatibility
 // Features: Raycasting, Custom Shaders, Magnetic Cursor, Orbiting Shapes
 
-;(() => {
+; (() => {
   // Debug flag - check browser console
   console.log("[v0] hero3d.js loaded")
 
@@ -27,6 +27,7 @@
       coral: 0xff6b6b,
       amber: 0xffaa00,
       purple: 0xaa66ff,
+      magenta: 0xff44cc,
       background: 0x0a0a0f,
     },
   }
@@ -133,15 +134,52 @@
   function createCentralHub() {
     const group = new window.THREE.Group()
 
-    // Core icosahedron with simple glowing material
+    // Core icosahedron with custom shader material
     const coreGeometry = new window.THREE.IcosahedronGeometry(1.8, 2)
-    const coreMaterial = new window.THREE.MeshPhongMaterial({
-      color: CONFIG.colors.teal,
-      emissive: CONFIG.colors.teal,
-      emissiveIntensity: 0.3,
+    const coreMaterial = new window.THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uHover: { value: 0 },
+        uColor: { value: new window.THREE.Color(CONFIG.colors.teal) },
+      },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          vViewPosition = -mvPosition.xyz;
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform float uHover;
+        uniform vec3 uColor;
+        
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        
+        void main() {
+          vec3 viewDir = normalize(vViewPosition);
+          float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 2.5);
+          
+          float pulse = sin(uTime * 2.0) * 0.1 + 0.9;
+          float hoverBoost = 1.0 + uHover * 0.8;
+          
+          vec3 baseColor = uColor * pulse * hoverBoost;
+          vec3 edgeGlow = uColor * fresnel * (1.5 + uHover * 2.0);
+          
+          vec3 finalColor = baseColor * 0.6 + edgeGlow;
+          float alpha = 0.6 + fresnel * 0.4 + uHover * 0.2;
+          
+          gl_FragColor = vec4(finalColor, alpha);
+        }
+      `,
       transparent: true,
-      opacity: 0.8,
-      shininess: 100,
+      side: window.THREE.DoubleSide,
+      depthWrite: false,
     })
 
     const core = new window.THREE.Mesh(coreGeometry, coreMaterial)
@@ -214,7 +252,7 @@
         orbitRadius: 10,
         orbitSpeed: 0.2,
         startAngle: window.Math.PI * 0.6,
-        color: CONFIG.colors.teal,
+        color: CONFIG.colors.white,
         name: "Events",
         category: "all",
       },
@@ -254,7 +292,7 @@
         orbitRadius: 10,
         orbitSpeed: 0.2,
         startAngle: window.Math.PI * 1.5,
-        color: CONFIG.colors.teal,
+        color: CONFIG.colors.magenta,
         name: "New Arrivals",
         category: "all",
       },
@@ -284,14 +322,53 @@
           break
       }
 
-      // Simple glowing material
-      const material = new window.THREE.MeshPhongMaterial({
-        color: shape.color,
-        emissive: shape.color,
-        emissiveIntensity: 0.4,
+      // Custom shader material for glowing effect
+      const material = new window.THREE.ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0 },
+          uHover: { value: 0 },
+          uColor: { value: new window.THREE.Color(shape.color) },
+          uPhase: { value: index * 1.5 },
+        },
+        vertexShader: `
+          varying vec3 vNormal;
+          varying vec3 vViewPosition;
+          
+          void main() {
+            vNormal = normalize(normalMatrix * normal);
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            vViewPosition = -mvPosition.xyz;
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `,
+        fragmentShader: `
+          uniform float uTime;
+          uniform float uHover;
+          uniform vec3 uColor;
+          uniform float uPhase;
+          
+          varying vec3 vNormal;
+          varying vec3 vViewPosition;
+          
+          void main() {
+            vec3 viewDir = normalize(vViewPosition);
+            float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 2.5);
+            
+            float pulse = sin(uTime * 1.5 + uPhase) * 0.15 + 0.85;
+            float hoverBoost = 1.0 + uHover * 0.7;
+            
+            vec3 baseColor = uColor * pulse * hoverBoost;
+            vec3 edgeGlow = uColor * fresnel * (1.0 + uHover * 2.0);
+            
+            vec3 finalColor = baseColor * 0.6 + edgeGlow;
+            float alpha = 0.7 + fresnel * 0.3 + uHover * 0.3;
+            
+            gl_FragColor = vec4(finalColor, alpha);
+          }
+        `,
         transparent: true,
-        opacity: 0.85,
-        shininess: 100,
+        side: window.THREE.DoubleSide,
+        depthWrite: false,
       })
 
       const mesh = new window.THREE.Mesh(geometry, material)
@@ -320,7 +397,7 @@
         rotSpeedY: (window.Math.random() - 0.5) * 0.02,
         rotSpeedZ: (window.Math.random() - 0.5) * 0.02,
         wireframe: wireframe,
-        pausedAngle: null, // Store angle when paused
+        pausedAngle: null,
       }
 
       scene.add(mesh)
@@ -394,8 +471,8 @@
       obj.scale.set(origScale.x * 1.3, origScale.y * 1.3, origScale.z * 1.3)
 
       let color = CONFIG.colors.teal
-      if (obj.material && obj.material.color) {
-        color = obj.material.color.getHex()
+      if (obj.material && obj.material.uniforms && obj.material.uniforms.uColor) {
+        color = obj.material.uniforms.uColor.value.getHex()
       }
 
       createBurstParticles(obj.position, color)
@@ -428,14 +505,11 @@
 
       var angle
       if (orbitsPaused) {
-        // When paused, keep the angle frozen
         if (ud.pausedAngle === null) {
           ud.pausedAngle = ud.startAngle + time * ud.orbitSpeed
         }
         angle = ud.pausedAngle
       } else {
-        // When not paused, calculate angle from time
-        // If we were paused, adjust startAngle to continue from where we left off
         if (ud.pausedAngle !== null) {
           ud.startAngle = ud.pausedAngle - time * ud.orbitSpeed
           ud.pausedAngle = null
@@ -451,22 +525,24 @@
       shape.position.z = z
       shape.position.y = ud.orbitY + floatY
 
-      // If hovered, add magnetic pull
       if (hoveredObject === shape) {
         shape.position.x += mouse.x * 2 * CONFIG.magnetStrength
         shape.position.y += mouse.y * 2 * CONFIG.magnetStrength
       }
 
-      // Self rotation
       shape.rotation.x += ud.rotSpeedX
       shape.rotation.y += ud.rotSpeedY
       shape.rotation.z += ud.rotSpeedZ
 
-      // Scale spring back
       var originalScale = ud.originalScale
       shape.scale.x += (originalScale.x - shape.scale.x) * 0.1
       shape.scale.y += (originalScale.y - shape.scale.y) * 0.1
       shape.scale.z += (originalScale.z - shape.scale.z) * 0.1
+
+      // Update shader time
+      if (shape.material && shape.material.uniforms) {
+        shape.material.uniforms.uTime.value = time
+      }
     }
 
     // Animate central hub
@@ -474,7 +550,11 @@
       centralHub.rotation.y += 0.005
       centralHub.position.y = 4 + window.Math.sin(time * 0.5) * 0.3
 
-      // Animate inner rings
+      // Update shader uniforms for central hub
+      if (centralHub.children[0] && centralHub.children[0].material && centralHub.children[0].material.uniforms) {
+        centralHub.children[0].material.uniforms.uTime.value = time
+      }
+
       for (var l = 0; l < centralHub.children.length; l++) {
         var child = centralHub.children[l]
         if (child.userData && child.userData.ringSpeed) {
@@ -509,7 +589,6 @@
       }
     }
 
-    // Subtle camera movement
     camera.position.x += (mouse.x * 2 - camera.position.x) * 0.02
     camera.position.y += (8 + mouse.y * 1 - camera.position.y) * 0.02
     camera.lookAt(0, 3, 0)
@@ -526,8 +605,11 @@
       if (hoveredObject.userData.wireframe) {
         hoveredObject.userData.wireframe.material.opacity = 0.5
       }
-      if (hoveredObject.material && hoveredObject.material.emissiveIntensity !== undefined) {
-        hoveredObject.material.emissiveIntensity = 0.4
+
+      // Update shader hover uniform
+      var mat = hoveredObject.material || (hoveredObject.children[0] && hoveredObject.children[0].material)
+      if (mat && mat.uniforms && mat.uniforms.uHover) {
+        mat.uniforms.uHover.value = window.Math.max(0, mat.uniforms.uHover.value - 0.05)
       }
     }
 
@@ -536,7 +618,6 @@
     if (intersects.length > 0) {
       var target = intersects[0].object
 
-      // Find parent if it's part of a group
       while (target.parent && !target.userData.isInteractive) {
         target = target.parent
       }
@@ -548,8 +629,11 @@
         if (target.userData.wireframe) {
           target.userData.wireframe.material.opacity = 1.0
         }
-        if (target.material && target.material.emissiveIntensity !== undefined) {
-          target.material.emissiveIntensity = 0.8
+
+        // Update shader hover uniform
+        var mat = target.material || (target.children[0] && target.children[0].material)
+        if (mat && mat.uniforms && mat.uniforms.uHover) {
+          mat.uniforms.uHover.value = window.Math.min(1, mat.uniforms.uHover.value + 0.1)
         }
 
         if (cursorFollower) {

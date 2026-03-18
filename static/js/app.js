@@ -1,581 +1,502 @@
-// LocalHub Application Logic
 class LocalHub {
   constructor() {
-    this.businesses = []
-    this.bookmarks = []
-    this.currentCategory = "all"
-    this.currentSort = "rating"
-    this.isVerified = false
-    this.selectedRating = 5
+    this.businesses = []; // Holds current zip search results
+    this.currentZip = '';
 
-    this.init()
+    this.currentCategory = 'all';
+    this.currentSort = 'default';
+    this.currentSearchText = '';
+
+    // BUG FIX: Store the FULL business objects, not just IDs
+    this.savedBusinesses = JSON.parse(localStorage.getItem('localhub_saved_data')) || [];
+
+    this.init();
   }
 
   async init() {
-    await this.loadBusinesses()
-    await this.loadDeals()
-    await this.loadBookmarks()
-    this.setupEventListeners()
-    this.setupSmoothScroll()
+    this.bindEvents();
   }
 
-  // API Methods
+  bindEvents() {
+    const searchBtn = document.getElementById('search-btn');
+    const zipInput = document.getElementById('zip-input');
+    if (searchBtn && zipInput) {
+      searchBtn.addEventListener('click', () => this.handleSearch(zipInput.value));
+      zipInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') this.handleSearch(zipInput.value);
+      });
+    }
+
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        this.currentSearchText = e.target.value;
+        this.applyFilters();
+      });
+    }
+
+    const sortSelect = document.getElementById('sort-select');
+    if (sortSelect) {
+      sortSelect.addEventListener('change', (e) => {
+        this.currentSort = e.target.value;
+        this.applyFilters();
+      });
+    }
+
+    const catBtns = document.querySelectorAll('.filter-btn');
+    catBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        catBtns.forEach(b => b.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+        this.currentCategory = e.currentTarget.dataset.category;
+        this.applyFilters();
+      });
+    });
+
+    // Handle PDF Report Generation Button
+    const reportBtn = document.getElementById('generate-report-btn');
+    if (reportBtn) {
+      reportBtn.addEventListener('click', () => this.generatePDF());
+    }
+
+    // Handle Interactive Q&A Help Modal
+    const helpFab = document.getElementById('help-fab');
+    const helpModal = document.getElementById('help-modal');
+    if (helpFab && helpModal) {
+      helpFab.addEventListener('click', () => helpModal.style.display = 'block');
+    }
+
+    // Close Modals
+    document.querySelectorAll('.modal-close').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.target.closest('.modal').style.display = 'none';
+      });
+    });
+
+    window.onclick = (event) => {
+      if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+      }
+    }
+  }
+
+  handleSearch(zipValue) {
+    const cleanedZip = zipValue.trim();
+    const zipInput = document.getElementById('zip-input');
+    const grid = document.getElementById('business-grid');
+
+    // --- UPDATED FRONTEND VALIDATION ---
+    // Check if it's NOT 5 digits, OR if it's mathematically under 500
+    if (!/^\d{5}$/.test(cleanedZip) || parseInt(cleanedZip, 10) < 500) {
+
+      // Turn the outline red using the CSS class
+      if (zipInput) {
+        zipInput.classList.add('input-error');
+      }
+
+      // Inject the red error message specifically (bypassing renderBusinesses)
+      if (grid) {
+        grid.innerHTML = `
+          <div class="empty-state" style="color: #ef4444; padding: 2rem;">
+              <p style="font-size: 1.2rem;"><strong>Please enter a valid zip code.</strong></p>
+          </div>
+        `;
+      }
+
+      return; // Stop the function here so it doesn't fetch from the server
+    }
+
+    // If we made it here, the ZIP is valid! 
+    // Remove the error class just in case they are fixing a previous typo.
+    if (zipInput) {
+      zipInput.classList.remove('input-error');
+    }
+
+    this.currentZip = cleanedZip;
+    this.currentCategory = 'all';
+    this.currentSearchText = '';
+    this.currentSort = 'default';
+
+    const catBtns = document.querySelectorAll('.filter-btn');
+    catBtns.forEach(b => b.classList.remove('active'));
+    const allBtn = document.querySelector('[data-category="all"]');
+    if (allBtn) allBtn.classList.add('active');
+
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) searchInput.value = '';
+
+    const sortSelect = document.getElementById('sort-select');
+    if (sortSelect) sortSelect.value = 'default';
+
+    this.loadBusinesses();
+  }
+
   async loadBusinesses() {
-    try {
-      const params = new URLSearchParams({
-        category: this.currentCategory,
-        sort: this.currentSort,
-        search: document.getElementById("search-input")?.value || "",
-      })
+    const grid = document.getElementById('business-grid');
+    grid.innerHTML = '<p class="loading">Searching for small businesses...</p>';
 
-      const response = await fetch(`/api/businesses?${params}`)
-      this.businesses = await response.json()
-      this.renderBusinesses()
+    try {
+      const res = await fetch(`/api/businesses?zip=${encodeURIComponent(this.currentZip)}`);
+      this.businesses = await res.json();
+      this.applyFilters();
     } catch (error) {
-      console.error("Failed to load businesses:", error)
+      console.error('Error:', error);
+      grid.innerHTML = '<p class="error">Failed to load data. Make sure server is running.</p>';
     }
   }
 
-  async loadDeals() {
-    try {
-      const response = await fetch("/api/deals")
-      const deals = await response.json()
-      this.renderDeals(deals)
-    } catch (error) {
-      console.error("Failed to load deals:", error)
+  applyFilters() {
+    // Determine source array based on category
+    let sourceArray = this.currentCategory === 'saved' ? this.savedBusinesses : this.businesses;
+
+    if (!sourceArray) return;
+    let result = [...sourceArray];
+
+    // --- THE FIX IS HERE ---
+    // Instead of ===, we use .includes() to catch categories like "Food & Dining"
+    if (this.currentCategory !== 'saved' && this.currentCategory !== 'all') {
+      result = result.filter(b => {
+        const businessCat = (b.category || "").toLowerCase();
+        const filterCat = this.currentCategory.toLowerCase();
+        return businessCat.includes(filterCat);
+      });
     }
+
+    // Apply text search
+    if (this.currentSearchText.trim() !== '') {
+      const lowerQuery = this.currentSearchText.toLowerCase();
+      result = result.filter(b =>
+        b.name.toLowerCase().includes(lowerQuery) ||
+        (b.category && b.category.toLowerCase().includes(lowerQuery))
+      );
+    }
+
+    // Apply sorting
+    if (this.currentSort === 'rating') {
+      result.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    } else if (this.currentSort === 'reviews') {
+      result.sort((a, b) => (b.review_count || 0) - (a.review_count || 0));
+    } else if (this.currentSort === 'name') {
+      result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    }
+
+    this.renderBusinesses(result);
   }
 
-  async loadBookmarks() {
-    try {
-      const response = await fetch("/api/bookmarks")
-      const bookmarked = await response.json()
-      this.bookmarks = bookmarked.map((b) => b.id)
-      this.renderBookmarks(bookmarked)
-    } catch (error) {
-      console.error("Failed to load bookmarks:", error)
+  toggleBookmark(id) {
+    // BUG FIX: Check if it's already saved by finding its index in the objects array
+    const savedIndex = this.savedBusinesses.findIndex(b => b.id === id);
+
+    if (savedIndex >= 0) {
+      // Remove it if it exists
+      this.savedBusinesses.splice(savedIndex, 1);
+    } else {
+      // Find the full object from the current search results and add it
+      const businessToSave = this.businesses.find(b => b.id === id);
+      if (businessToSave) {
+        this.savedBusinesses.push(businessToSave);
+      }
     }
+
+    // Save the entire array of objects to localStorage
+    localStorage.setItem('localhub_saved_data', JSON.stringify(this.savedBusinesses));
+    this.applyFilters();
   }
 
-  async toggleBookmark(businessId, event) {
-    event.stopPropagation()
-
-    const isBookmarked = this.bookmarks.includes(businessId)
-    const method = isBookmarked ? "DELETE" : "POST"
-
-    try {
-      const response = await fetch("/api/bookmarks", {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ business_id: businessId }),
-      })
-
-      const result = await response.json()
-      this.bookmarks = result.bookmarks
-
-      // Update UI
-      this.updateBookmarkButtons()
-      await this.loadBookmarks()
-
-      this.showToast(isBookmarked ? "Removed from saved" : "Saved to favorites")
-    } catch (error) {
-      console.error("Failed to toggle bookmark:", error)
+  // PDF GENERATION FEATURE (Replaces CSV)
+  generatePDF() {
+    if (this.savedBusinesses.length === 0) {
+      alert("You haven't saved any businesses yet! Save some local businesses first to generate a report.");
+      return;
     }
+
+    // Generate formatted HTML table rows for the PDF
+    const tableRows = this.savedBusinesses.map(b => `
+      <tr>
+        <td><strong>${this.escapeHTML(b.name)}</strong></td>
+        <td class="category">${this.escapeHTML(b.category)}</td>
+        <td>${b.rating} ⭐ (${b.review_count} reviews on LocalHub)</td>
+        <td>${this.escapeHTML(b.address)}</td>
+      </tr>
+    `).join('');
+
+    // Create a beautiful HTML template for the print window
+    const pdfHtml = `
+      <html>
+        <head>
+          <title>LocalHub - My Saved Directory</title>
+          <style>
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #222; padding: 40px; margin: 0; }
+            .header { text-align: center; border-bottom: 3px solid #10b981; padding-bottom: 20px; margin-bottom: 30px; }
+            .title { font-size: 32px; font-weight: 800; color: #000; margin: 0; }
+            .subtitle { font-size: 16px; color: #555; margin-top: 5px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+            th, td { padding: 15px; text-align: left; border-bottom: 1px solid #ddd; }
+            th { background-color: #f8f9fa; font-weight: bold; color: #333; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
+            .category { text-transform: capitalize; color: #10b981; font-weight: 600; }
+            .footer { text-align: center; margin-top: 50px; font-size: 12px; color: #888; border-top: 1px solid #eee; padding-top: 20px; }
+            @media print { 
+              body { -webkit-print-color-adjust: exact; color-adjust: exact; }
+              @page { margin: 1cm; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1 class="title">LocalHub</h1>
+            <p class="subtitle">Your Guide to Local Businesses</p>
+            <p style="font-size: 12px; color: #888;">Generated on: ${new Date().toLocaleDateString()}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Business Name</th>
+                <th>Category</th>
+                <th>Community Rating</th>
+                <th>Zip Code / Address</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+          <div class="footer">
+            <p>Thank you for supporting small businesses and your local community.</p>
+            <p><strong>localhub.app</strong></p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    // Open a hidden window, write the HTML, and trigger the native Print/Save as PDF dialog
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    printWindow.document.open();
+    printWindow.document.write(pdfHtml);
+    printWindow.document.close();
+
+    // Wait for styles to load, then print
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
   }
 
-  async loadBusinessDetail(businessId) {
-    try {
-      const [businessRes, reviewsRes] = await Promise.all([
-        fetch(`/api/business/${businessId}`),
-        fetch(`/api/reviews/${businessId}`),
-      ])
+  escapeHTML(str) {
+    if (!str) return '';
+    return str.replace(/[&<>'"]/g, tag => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[tag]));
+  }
 
-      const business = await businessRes.json()
-      const reviews = await reviewsRes.json()
+  renderBusinesses(data) {
+    const grid = document.getElementById('business-grid');
+    if (!grid) return;
 
-      this.renderBusinessDetail(business, reviews)
-      this.openModal("business-modal")
-    } catch (error) {
-      console.error("Failed to load business detail:", error)
+    if (data.length === 0) {
+      grid.innerHTML =
+        `<div class="empty-state">
+            <p style="color: #FFCC00;"><strong>No businesses found!</strong></p>
+        </div>`;
+      return;
     }
+
+    grid.innerHTML = data.map(business => {
+      // BUG FIX: Check if business object exists in saved array
+      const isSaved = this.savedBusinesses.some(saved => saved.id === business.id);
+      const heartClass = isSaved ? 'saved' : '';
+      const heartIcon = isSaved ? '&#9829;' : '&#9825;';
+
+      return `
+          <div class="business-card">
+              <div class="card-header">
+                  <div class="header-text">
+                      <h3>${this.escapeHTML(business.name)}</h3>
+                      <span class="category-badge">${business.category}</span>
+                  </div>
+                  <button class="btn-bookmark ${heartClass}" onclick="window.app.toggleBookmark('${business.id}')" aria-label="Save this business">
+                      ${heartIcon}
+                  </button>
+              </div>
+              
+              <div class="rating">${business.rating} <span style="color:#666; font-size:0.8em">(${business.review_count} verified reviews)</span></div>
+              
+              ${business.deals && business.deals.length > 0
+          ? `<div class="deal-badge">${this.escapeHTML(business.deals[0].discount)} (Code: ${this.escapeHTML(business.deals[0].code)})</div>`
+          : ''}
+              
+              <button class="btn-details" onclick="window.app.openModal('${business.id}')">View Details & Coupons</button>
+          </div>
+          `;
+    }).join('');
+  }
+
+  async openModal(id) {
+    // BUG FIX: Check both arrays so the modal opens even if clicked from the "Saved" tab
+    const business = this.businesses.find(b => b.id === id) || this.savedBusinesses.find(b => b.id === id);
+    if (!business) return;
+
+    const modal = document.getElementById('business-modal');
+    const modalBody = document.getElementById('modal-body');
+
+    const res = await fetch(`/api/reviews/${id}`);
+    const reviews = await res.json();
+
+    const couponsHtml = business.deals && business.deals.length > 0
+      ? business.deals.map(d => `<div class="deal-badge" style="margin-top:5px"><strong>${this.escapeHTML(d.discount)}</strong> - Use Code: ${this.escapeHTML(d.code)}</div>`).join('')
+      : '<p>No coupons yet. Do you know one?</p>';
+
+    const reviewsHtml = reviews.map(r => `
+          <div class="review-item">
+              <strong>${this.escapeHTML(r.user)}</strong> <span>${r.rating} ⭐</span>
+              <p>${this.escapeHTML(r.text)}</p>
+              <small style="color:#666">${r.date}</small>
+          </div>
+      `).join('');
+
+    modalBody.innerHTML = `
+          <h2>${this.escapeHTML(business.name)}</h2>
+          <p><strong>Category:</strong> <span style="text-transform: capitalize">${business.category}</span></p>
+          <p><strong>Community Rating:</strong> ${business.rating} / 5</p>
+          
+          <hr style="border-color: #333; margin: 1rem 0;">
+          
+          <h3>Community Coupons</h3>
+          <div id="coupons-list">${couponsHtml}</div>
+          <button id="toggle-coupon-form" class="btn-details" style="margin-top:10px; font-size: 0.9rem;">Know about a coupon? Click here</button>
+          
+          <div id="coupon-form-container" style="display:none; margin-top:15px; background:#111; padding:15px; border-radius:8px; border:1px solid #333;">
+              <h4>Share a Coupon</h4>
+              <input type="text" id="coupon-code" placeholder="Coupon Code (e.g. SAVE10)" required>
+              <input type="text" id="coupon-desc" placeholder="What does it do? (e.g. 10% Off)" required>
+              <div class="captcha-section">
+                  <p id="captcha-q-c">Loading...</p>
+                  <input type="text" id="captcha-a-c" placeholder="Math Answer">
+              </div>
+              <button id="submit-coupon-btn" class="btn-primary" style="width:100%; margin-top:10px;">Submit Coupon</button>
+          </div>
+
+          <hr style="border-color: #333; margin: 1rem 0;">
+          
+          <h3>Reviews</h3>
+          <div class="reviews-list">${reviews.length ? reviewsHtml : '<p>No reviews yet. Be the first!</p>'}</div>
+          
+          <h4 style="margin-top:20px">Leave a Review</h4>
+          <form id="review-form">
+              <input type="text" id="review-user" placeholder="Your Name" required>
+              <select id="review-rating">
+                  <option value="5">5 Stars</option>
+                  <option value="4">4 Stars</option>
+                  <option value="3">3 Stars</option>
+                  <option value="2">2 Stars</option>
+                  <option value="1">1 Star</option>
+              </select>
+              <textarea id="review-text" placeholder="Share your experience..." required></textarea>
+              
+              <div class="captcha-section">
+                  <p id="captcha-q-r">Loading...</p>
+                  <input type="text" id="captcha-a-r" placeholder="Math Answer" required>
+              </div>
+              
+              <button type="submit" class="btn-primary">Submit Review</button>
+          </form>
+      `;
+
+    modal.style.display = 'block';
+    this.loadCaptcha('r');
+
+    document.getElementById('toggle-coupon-form').addEventListener('click', () => {
+      const form = document.getElementById('coupon-form-container');
+      if (form.style.display === 'none') {
+        form.style.display = 'block';
+        this.loadCaptcha('c');
+      } else {
+        form.style.display = 'none';
+      }
+    });
+
+    document.getElementById('submit-coupon-btn').addEventListener('click', () => this.submitCoupon(id));
+    document.getElementById('review-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.submitReview(id);
+    });
+  }
+
+  async loadCaptcha(type) {
+    const res = await fetch('/api/captcha');
+    const data = await res.json();
+    const el = document.getElementById(`captcha-q-${type}`);
+    if (el) el.innerText = data.question + " = ?";
+  }
+
+  async verifyCaptcha(answer) {
+    const verifyRes = await fetch('/api/verify-captcha', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answer: answer })
+    });
+    const verifyData = await verifyRes.json();
+    return verifyData.success;
   }
 
   async submitReview(businessId) {
-    if (!this.isVerified) {
-      await this.showVerification()
-      return
+    const answer = document.getElementById('captcha-a-r').value;
+    const isHuman = await this.verifyCaptcha(answer);
+
+    if (!isHuman) {
+      alert("Incorrect Math Answer! Please prove you are human.");
+      return;
     }
 
-    const name = document.getElementById("reviewer-name").value.trim() || "Anonymous"
-    const text = document.getElementById("review-text").value.trim()
+    const reviewData = {
+      businessId: businessId,
+      user: document.getElementById('review-user').value,
+      rating: document.getElementById('review-rating').value,
+      text: document.getElementById('review-text').value
+    };
 
-    if (!text) {
-      this.showToast("Please write a review")
-      return
+    await fetch('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reviewData)
+    });
+
+    alert("Review Submitted! Thank you for supporting local.");
+    document.getElementById('business-modal').style.display = 'none';
+    this.loadBusinesses();
+  }
+
+  async submitCoupon(businessId) {
+    const answer = document.getElementById('captcha-a-c').value;
+    const code = document.getElementById('coupon-code').value;
+    const disc = document.getElementById('coupon-desc').value;
+
+    if (!code || !disc) {
+      alert("Please fill in coupon details");
+      return;
     }
 
-    try {
-      const response = await fetch("/api/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          business_id: businessId,
-          user: name,
-          rating: this.selectedRating,
-          text: text,
-        }),
+    const isHuman = await this.verifyCaptcha(answer);
+    if (!isHuman) {
+      alert("Incorrect Math Answer! Please prove you are human.");
+      return;
+    }
+
+    await fetch('/api/coupon', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        businessId: businessId,
+        code: code,
+        discount: disc
       })
+    });
 
-      const result = await response.json()
-
-      if (result.success) {
-        this.showToast("Review submitted successfully!")
-        await this.loadBusinessDetail(businessId)
-        await this.loadBusinesses()
-      } else {
-        this.showToast(result.error || "Failed to submit review")
-      }
-    } catch (error) {
-      console.error("Failed to submit review:", error)
-    }
-  }
-
-  async showVerification() {
-    try {
-      const response = await fetch("/api/captcha")
-      const { question } = await response.json()
-
-      document.getElementById("captcha-question").textContent = question
-      document.getElementById("captcha-input").value = ""
-      document.getElementById("captcha-error").textContent = ""
-
-      this.openModal("verification-modal")
-    } catch (error) {
-      console.error("Failed to load captcha:", error)
-    }
-  }
-
-  async verifyCaptcha() {
-    const answer = document.getElementById("captcha-input").value.trim()
-
-    try {
-      const response = await fetch("/api/verify-captcha", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answer }),
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        this.isVerified = true
-        this.closeModal("verification-modal")
-        this.showToast("Verification successful! You can now leave reviews.")
-      } else {
-        document.getElementById("captcha-error").textContent = result.message
-        await this.showVerification() // Refresh captcha
-      }
-    } catch (error) {
-      console.error("Failed to verify captcha:", error)
-    }
-  }
-
-  // Render Methods
-  renderBusinesses() {
-    const grid = document.getElementById("businesses-grid")
-    grid.innerHTML = this.businesses.map((business) => this.createBusinessCard(business)).join("")
-  }
-
-  createBusinessCard(business) {
-    const isBookmarked = this.bookmarks.includes(business.id)
-    const icon = this.getCategoryIcon(business.category)
-
-    return `
-            <div class="business-card" onclick="app.loadBusinessDetail(${business.id})">
-                <div class="card-image">
-                    ${icon}
-                    ${business.verified ? '<span class="card-badge">Verified</span>' : ""}
-                    <button class="card-bookmark ${isBookmarked ? "bookmarked" : ""}" 
-                            onclick="app.toggleBookmark(${business.id}, event)">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="${isBookmarked ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2">
-                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-                        </svg>
-                    </button>
-                </div>
-                <div class="card-content">
-                    <h3>
-                        ${business.name}
-                        ${
-                          business.verified
-                            ? `
-                            <svg class="verified-badge" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                        `
-                            : ""
-                        }
-                    </h3>
-                    <span class="card-category">${business.category}</span>
-                    <p class="card-description">${business.description}</p>
-                    <div class="card-meta">
-                        <div class="rating">
-                            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                            <span>${business.rating}</span>
-                            <span class="review-count">(${business.review_count})</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `
-  }
-
-  renderDeals(deals) {
-    const container = document.getElementById("deals-container")
-
-    if (deals.length === 0) {
-      container.innerHTML = '<p class="empty-state visible">No active deals at the moment.</p>'
-      return
-    }
-
-    container.innerHTML = deals
-      .map(
-        (deal) => `
-            <div class="deal-card">
-                <div class="deal-content">
-                    <p class="deal-business">${deal.business_name}</p>
-                    <h3 class="deal-title">${deal.title}</h3>
-                    <div class="deal-code" onclick="app.copyCode('${deal.code}')">
-                        <span>${deal.code}</span>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                        </svg>
-                    </div>
-                    <p class="deal-expires">Expires: ${deal.expires}</p>
-                </div>
-            </div>
-        `,
-      )
-      .join("")
-  }
-
-  renderBookmarks(bookmarked) {
-    const container = document.getElementById("bookmarks-container")
-    const emptyState = document.getElementById("no-bookmarks")
-
-    if (bookmarked.length === 0) {
-      container.innerHTML = ""
-      emptyState.classList.add("visible")
-      return
-    }
-
-    emptyState.classList.remove("visible")
-    container.innerHTML = bookmarked.map((business) => this.createBusinessCard(business)).join("")
-  }
-
-  renderBusinessDetail(business, reviews) {
-    const icon = this.getCategoryIcon(business.category)
-    const isBookmarked = this.bookmarks.includes(business.id)
-
-    const modalBody = document.getElementById("modal-body")
-    modalBody.innerHTML = `
-            <div class="business-detail">
-                <div class="detail-header">
-                    <div>
-                        <h2>
-                            ${business.name}
-                            ${
-                              business.verified
-                                ? `
-                                <svg class="verified-badge" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                </svg>
-                            `
-                                : ""
-                            }
-                        </h2>
-                        <span class="card-category">${business.category}</span>
-                    </div>
-                    <button class="btn-secondary ${isBookmarked ? "bookmarked" : ""}" 
-                            onclick="app.toggleBookmark(${business.id}, event)">
-                        ${isBookmarked ? "Saved" : "Save"}
-                    </button>
-                </div>
-                
-                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">${business.description}</p>
-                
-                <div class="detail-info">
-                    <div class="info-row">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                            <circle cx="12" cy="10" r="3"></circle>
-                        </svg>
-                        <span>${business.address}</span>
-                    </div>
-                    <div class="info-row">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-                        </svg>
-                        <span>${business.phone}</span>
-                    </div>
-                    <div class="info-row">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12 6 12 12 16 14"></polyline>
-                        </svg>
-                        <span>${business.hours}</span>
-                    </div>
-                    <div class="info-row">
-                        <svg viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                        </svg>
-                        <span><strong>${business.rating}</strong> (${business.review_count} reviews)</span>
-                    </div>
-                </div>
-                
-                ${
-                  business.deals.length > 0
-                    ? `
-                    <div style="background: var(--accent-dim); border: 1px solid var(--accent); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 2rem;">
-                        <p style="color: var(--accent); font-weight: 600; margin-bottom: 0.5rem;">Active Deal</p>
-                        <p style="font-weight: 500;">${business.deals[0].title}</p>
-                        <div class="deal-code" onclick="app.copyCode('${business.deals[0].code}')" style="margin-top: 0.5rem;">
-                            <span>${business.deals[0].code}</span>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                            </svg>
-                        </div>
-                    </div>
-                `
-                    : ""
-                }
-                
-                <div class="reviews-section">
-                    <h3>Reviews</h3>
-                    
-                    <div class="review-form">
-                        <h4>Write a Review</h4>
-                        <div class="form-group">
-                            <label>Your Rating</label>
-                            <div class="star-rating" id="star-rating">
-                                ${[1, 2, 3, 4, 5]
-                                  .map(
-                                    (i) => `
-                                    <button class="${i <= this.selectedRating ? "active" : ""}" 
-                                            onclick="app.setRating(${i})">
-                                        <svg viewBox="0 0 24 24" fill="${i <= this.selectedRating ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2">
-                                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                                        </svg>
-                                    </button>
-                                `,
-                                  )
-                                  .join("")}
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="reviewer-name">Your Name (optional)</label>
-                            <input type="text" id="reviewer-name" placeholder="Anonymous">
-                        </div>
-                        <div class="form-group">
-                            <label for="review-text">Your Review</label>
-                            <textarea id="review-text" rows="3" placeholder="Share your experience..."></textarea>
-                        </div>
-                        <button class="btn-primary" onclick="app.submitReview(${business.id})">
-                            ${this.isVerified ? "Submit Review" : "Verify & Submit"}
-                        </button>
-                    </div>
-                    
-                    <div class="review-list">
-                        ${
-                          reviews.length > 0
-                            ? reviews
-                                .map(
-                                  (review) => `
-                            <div class="review-item">
-                                <div class="review-header">
-                                    <span class="review-user">${review.user}</span>
-                                    <span class="review-date">${review.date}</span>
-                                </div>
-                                <div class="review-rating">
-                                    ${[1, 2, 3, 4, 5]
-                                      .map(
-                                        (i) => `
-                                        <svg viewBox="0 0 24 24" fill="${i <= review.rating ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" style="color: ${i <= review.rating ? "var(--warning)" : "var(--border)"}">
-                                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                                        </svg>
-                                    `,
-                                      )
-                                      .join("")}
-                                </div>
-                                <p class="review-text">${review.text}</p>
-                            </div>
-                        `,
-                                )
-                                .join("")
-                            : '<p style="color: var(--text-secondary);">No reviews yet. Be the first to share your experience!</p>'
-                        }
-                    </div>
-                </div>
-            </div>
-        `
-  }
-
-  getCategoryIcon(category) {
-    const icons = {
-      food: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
-                <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
-                <line x1="6" y1="1" x2="6" y2="4"></line>
-                <line x1="10" y1="1" x2="10" y2="4"></line>
-                <line x1="14" y1="1" x2="14" y2="4"></line>
-            </svg>`,
-      retail: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <path d="M16 10a4 4 0 0 1-8 0"></path>
-            </svg>`,
-      services: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
-            </svg>`,
-    }
-    return icons[category] || icons.services
-  }
-
-  // Event Handlers
-  setupEventListeners() {
-    // Category filters
-    document.querySelectorAll(".filter-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"))
-        btn.classList.add("active")
-        this.currentCategory = btn.dataset.category
-        this.loadBusinesses()
-      })
-    })
-
-    // Sort select
-    document.getElementById("sort-select").addEventListener("change", (e) => {
-      this.currentSort = e.target.value
-      this.loadBusinesses()
-    })
-
-    // Search
-    const searchInput = document.getElementById("search-input")
-    const searchBtn = document.getElementById("search-btn")
-
-    searchBtn.addEventListener("click", () => this.loadBusinesses())
-    searchInput.addEventListener("keypress", (e) => {
-      if (e.key === "Enter") this.loadBusinesses()
-    })
-
-    // Explore button
-    document.getElementById("explore-btn").addEventListener("click", () => {
-      document.getElementById("explore").scrollIntoView({ behavior: "smooth" })
-    })
-
-    // Modal close buttons
-    document.querySelectorAll(".modal-close").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        btn.closest(".modal").classList.remove("active")
-      })
-    })
-
-    // Close modal on backdrop click
-    document.querySelectorAll(".modal").forEach((modal) => {
-      modal.addEventListener("click", (e) => {
-        if (e.target === modal) modal.classList.remove("active")
-      })
-    })
-
-    // Verification
-    document.getElementById("verify-btn").addEventListener("click", () => this.verifyCaptcha())
-    document.getElementById("captcha-input").addEventListener("keypress", (e) => {
-      if (e.key === "Enter") this.verifyCaptcha()
-    })
-  }
-
-  setupSmoothScroll() {
-    document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
-      anchor.addEventListener("click", (e) => {
-        e.preventDefault()
-        const target = document.querySelector(anchor.getAttribute("href"))
-        if (target) {
-          target.scrollIntoView({ behavior: "smooth" })
-        }
-      })
-    })
-  }
-
-  // Utility Methods
-  setRating(rating) {
-    this.selectedRating = rating
-    const buttons = document.querySelectorAll("#star-rating button")
-    buttons.forEach((btn, i) => {
-      const svg = btn.querySelector("svg")
-      if (i < rating) {
-        btn.classList.add("active")
-        svg.setAttribute("fill", "currentColor")
-      } else {
-        btn.classList.remove("active")
-        svg.setAttribute("fill", "none")
-      }
-    })
-  }
-
-  updateBookmarkButtons() {
-    document.querySelectorAll(".card-bookmark").forEach((btn) => {
-      const card = btn.closest(".business-card")
-      if (card) {
-        const businessId = Number.parseInt(card.getAttribute("onclick").match(/\d+/)[0])
-        if (this.bookmarks.includes(businessId)) {
-          btn.classList.add("bookmarked")
-          btn.querySelector("svg").setAttribute("fill", "currentColor")
-        } else {
-          btn.classList.remove("bookmarked")
-          btn.querySelector("svg").setAttribute("fill", "none")
-        }
-      }
-    })
-  }
-
-  openModal(modalId) {
-    document.getElementById(modalId).classList.add("active")
-  }
-
-  closeModal(modalId) {
-    document.getElementById(modalId).classList.remove("active")
-  }
-
-  copyCode(code) {
-    navigator.clipboard.writeText(code).then(() => {
-      this.showToast(`Copied: ${code}`)
-    })
-  }
-
-  showToast(message) {
-    // Remove existing toast
-    const existingToast = document.querySelector(".toast")
-    if (existingToast) existingToast.remove()
-
-    const toast = document.createElement("div")
-    toast.className = "toast"
-    toast.textContent = message
-    document.body.appendChild(toast)
-
-    // Trigger animation
-    setTimeout(() => toast.classList.add("show"), 10)
-
-    // Remove after delay
-    setTimeout(() => {
-      toast.classList.remove("show")
-      setTimeout(() => toast.remove(), 300)
-    }, 3000)
+    alert("Coupon Shared! Thank you for supporting the community.");
+    document.getElementById('business-modal').style.display = 'none';
+    this.loadBusinesses();
   }
 }
 
-// Initialize app
-let app
-document.addEventListener("DOMContentLoaded", () => {
-  app = new LocalHub()
-})
+window.app = null;
+document.addEventListener('DOMContentLoaded', () => {
+  window.app = new LocalHub();
+});

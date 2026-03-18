@@ -14,121 +14,93 @@
     />
   </head>
   <body>
-    <!-- 3D Hero Canvas -->
     <div id="hero-container">
       <canvas id="hero-canvas"></canvas>
       <div id="hero-overlay">
         <nav id="main-nav">
           <div class="nav-brand">LocalHub</div>
-          <div class="nav-links">
-            <a href="#explore" class="nav-link">Explore</a>
-            <a href="#deals" class="nav-link">Deals</a>
-            <a href="#bookmarks" class="nav-link">Saved</a>
-          </div>
         </nav>
         <div id="hero-content">
-          <h1>Discover Local</h1>
-          <p>Support small businesses in your community</p>
-          <button id="explore-btn" class="btn-primary">Start Exploring</button>
+          <h1>Discover Local Companies</h1>
+          <p style="color: white;">Support small businesses in your community</p>
+          <a href="#explore" id="explore-btn" class="btn-primary">Start Exploring</a>
         </div>
         <div id="cursor-follower"></div>
         <div id="object-label"></div>
       </div>
     </div>
 
-    <!-- Main Content -->
     <main id="main-content">
-      <!-- Search & Filter Section -->
       <section id="explore" class="section">
         <div class="section-header">
           <h2>Find Local Businesses</h2>
-          <div class="search-container">
-            <input
-              type="text"
-              id="search-input"
-              placeholder="Search businesses..."
-            />
-            <button id="search-btn" class="btn-icon">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-            </button>
+          <div class="location-search-container">
+            <input type="text" id="zip-input" placeholder="Enter Zip Code (e.g., 19335)" aria-label="Enter your 5-digit zip code to search for businesses" aria-required="true" />
+            <button id="search-btn" class="btn-primary" aria-label="Search for local businesses">Search</button>
           </div>
         </div>
 
         <div class="filters">
           <div class="category-filters">
-            <button class="filter-btn active" data-category="all">All</button>
-            <button class="filter-btn" data-category="food">
-              Food & Dining
-            </button>
-            <button class="filter-btn" data-category="retail">Retail</button>
-            <button class="filter-btn" data-category="services">
-              Services
-            </button>
+            <button class="filter-btn active" data-category="all" aria-label="Show all categories">All</button>
+            <button class="filter-btn" data-category="food" aria-label="Filter by Food">Food</button>
+            <button class="filter-btn" data-category="retail" aria-label="Filter by Retail">Retail</button>
+            <button class="filter-btn" data-category="services" aria-label="Filter by Services">Services</button>
+            <button class="filter-btn" data-category="saved" style="border-color: #ef4444; color: #ef4444;" aria-label="Show saved businesses">Saved</button>
           </div>
-          <div class="sort-container">
-            <label for="sort-select">Sort by:</label>
-            <select id="sort-select">
+          <div class="search-sort">
+            <input type="text" id="search-input" placeholder="Filter by name..." aria-label="Filter businesses by name" />
+            <select id="sort-select" aria-label="Sort businesses">
+              <option value="default">Sort By</option>
               <option value="rating">Top Rated</option>
               <option value="reviews">Most Reviewed</option>
               <option value="name">Name (A-Z)</option>
             </select>
+            <button id="generate-report-btn" class="btn-primary" style="margin-left: 10px; font-size: 0.85rem;" aria-label="Generate a formatted PDF report of saved businesses">Download Saved Businesses (PDF)</button>
           </div>
         </div>
 
-        <div id="businesses-grid" class="businesses-grid"></div>
+        <div id="business-grid" class="businesses-grid">
+            <div class="empty-state">
+                <p>Enter a Zip Code above to find local businesses!</p>
+            </div>
+        </div>
       </section>
-
-      <!-- Deals Section -->
-      <section id="deals" class="section">
-        <h2>Special Deals & Coupons</h2>
-        <div id="deals-container" class="deals-container"></div>
-      </section>
-
-      <!-- Bookmarks Section -->
-      <section id="bookmarks" class="section">
-        <h2>Your Saved Businesses</h2>
-        <div id="bookmarks-container" class="businesses-grid"></div>
-        <p id="no-bookmarks" class="empty-state">
-          No saved businesses yet. Click the bookmark icon on any business to
-          save it!
-        </p>
-      </section>
+      <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
     </main>
 
-    <!-- Business Detail Modal -->
-    <div id="business-modal" class="modal">
+    <div id="business-modal" class="modal" role="dialog" aria-modal="true">
       <div class="modal-content">
-        <button class="modal-close">&times;</button>
+        <button class="modal-close" aria-label="Close modal">&times;</button>
         <div id="modal-body"></div>
       </div>
     </div>
 
-    <!-- Verification Modal -->
-    <div id="verification-modal" class="modal">
-      <div class="modal-content verification-content">
-        <h3>Quick Verification</h3>
-        <p>Please solve this simple math problem to verify you're human:</p>
-        <div class="captcha-container">
-          <span id="captcha-question"></span>
-          <span>=</span>
-          <input type="text" id="captcha-input" placeholder="?" />
-        </div>
-        <button id="verify-btn" class="btn-primary">Verify</button>
-        <p id="captcha-error" class="error-text"></p>
+    <button id="help-fab" aria-label="Help and Instructions" style="position:fixed; bottom:20px; right:20px; border-radius:50%; width:50px; height:50px; background:var(--accent); color:#000; font-weight:bold; font-size: 1.5rem; z-index:9999; cursor:pointer; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">?</button>
+    
+    <div id="help-modal" class="modal" role="dialog" aria-modal="true">
+      <div class="modal-content" style="max-width: 500px;">
+        <button class="modal-close" aria-label="Close help modal" style="float:right; background:none; border:none; color:white; font-size:1.5rem; cursor:pointer;">&times;</button>
+        <h3 style="margin-top:0;">How to use LocalHub</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 20px;">Interactive Q&A Guide</p>
+        
+        <details style="margin-bottom: 10px; background: #1a1a1a; padding: 10px; border-radius: 6px;">
+          <summary style="font-weight: bold; cursor: pointer;">Q: How do I find businesses?</summary>
+          <p style="margin-top: 10px; font-size: 0.9rem;"><strong>A:</strong> Enter your 5-digit US Zip Code in the search bar. Our system will securely hydrate our database with fresh, verified local businesses from your area.</p>
+        </details>
+        
+        <details style="margin-bottom: 10px; background: #1a1a1a; padding: 10px; border-radius: 6px;">
+          <summary style="font-weight: bold; cursor: pointer;">Q: What are the floating shapes?</summary>
+          <p style="margin-top: 10px; font-size: 0.9rem;"><strong>A:</strong> They are interactive category filters! Click them to automatically filter your local results by Food, Retail, or Services.</p>
+        </details>
+
+        <details style="margin-bottom: 10px; background: #1a1a1a; padding: 10px; border-radius: 6px;">
+          <summary style="font-weight: bold; cursor: pointer;">Q: How do I save or export my favorites?</summary>
+          <p style="margin-top: 10px; font-size: 0.9rem;"><strong>A:</strong> Click the heart icon to save a business to your local device. You can then click the "Download Saved (CSV)" button to export a custom report of your favorites!</p>
+        </details>
       </div>
     </div>
 
-    <!-- Using r128 which has proper CDN support for all files -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="{{ url_for('static', filename='js/hero3d.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>

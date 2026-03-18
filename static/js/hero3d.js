@@ -1,11 +1,4 @@
-// Advanced 3D Hero Scene - Self-contained with r128 compatibility
-// Features: Raycasting, Custom Shaders, Magnetic Cursor, Orbiting Shapes
-
 ; (() => {
-  // Debug flag - check browser console
-  console.log("[v0] hero3d.js loaded")
-
-  // Scene variables
   let scene, camera, renderer
   let raycaster, mouse
   let centralHub
@@ -18,27 +11,24 @@
   const startTime = Date.now()
   let orbitsPaused = false
 
-  // Configuration
   const CONFIG = {
     magnetStrength: 0.12,
     colors: {
-      teal: 0x00d4aa,
+      teal: 0x10b981,
       blue: 0x4488ff,
       coral: 0xff6b6b,
       amber: 0xffaa00,
       purple: 0xaa66ff,
       magenta: 0xff44cc,
-      background: 0x0a0a0f,
+      white: 0xffffff,
+      background: 0x000000,
     },
   }
 
-  // Wait for DOM and THREE
   function waitForThree() {
     if (typeof window.THREE !== "undefined") {
-      console.log("[v0] THREE.js loaded successfully")
       init()
     } else {
-      console.log("[v0] Waiting for THREE.js...")
       setTimeout(waitForThree, 100)
     }
   }
@@ -50,28 +40,21 @@
   }
 
   function init() {
-    console.log("[v0] Initializing 3D scene")
-
     const canvas = document.getElementById("hero-canvas")
     if (!canvas) {
-      console.error("[v0] Canvas not found!")
       return
     }
 
     cursorFollower = document.getElementById("cursor-follower")
     objectLabel = document.getElementById("object-label")
 
-    // Scene
     scene = new window.THREE.Scene()
-    scene.background = new window.THREE.Color(CONFIG.colors.background)
     scene.fog = new window.THREE.FogExp2(CONFIG.colors.background, 0.008)
 
-    // Camera
     camera = new window.THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000)
-    camera.position.set(0, 8, 22)
+    camera.position.set(0, 7, 17)
     camera.lookAt(0, 2, 0)
 
-    // Renderer
     renderer = new window.THREE.WebGLRenderer({
       canvas: canvas,
       antialias: true,
@@ -80,18 +63,13 @@
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
-    // Raycaster
     raycaster = new window.THREE.Raycaster()
     mouse = new window.THREE.Vector2(-100, -100)
 
-    // Build scene
     setupLights()
     createCentralHub()
     createFloatingShapes()
 
-    console.log("[v0] Created " + floatingShapes.length + " orbiting shapes")
-
-    // Events
     window.addEventListener("resize", onResize)
     window.addEventListener("mousemove", onMouseMove)
     window.addEventListener("click", onClick)
@@ -105,7 +83,6 @@
       mouse.set(-100, -100)
     })
 
-    console.log("[v0] Starting animation loop")
     animate()
   }
 
@@ -134,7 +111,6 @@
   function createCentralHub() {
     const group = new window.THREE.Group()
 
-    // Core icosahedron with custom shader material
     const coreGeometry = new window.THREE.IcosahedronGeometry(1.8, 2)
     const coreMaterial = new window.THREE.ShaderMaterial({
       uniforms: {
@@ -145,7 +121,6 @@
       vertexShader: `
         varying vec3 vNormal;
         varying vec3 vViewPosition;
-        
         void main() {
           vNormal = normalize(normalMatrix * normal);
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -157,23 +132,16 @@
         uniform float uTime;
         uniform float uHover;
         uniform vec3 uColor;
-        
         varying vec3 vNormal;
         varying vec3 vViewPosition;
-        
         void main() {
           vec3 viewDir = normalize(vViewPosition);
           float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 2.5);
-          
-          float pulse = sin(uTime * 2.0) * 0.1 + 0.9;
-          float hoverBoost = 1.0 + uHover * 0.8;
-          
-          vec3 baseColor = uColor * pulse * hoverBoost;
-          vec3 edgeGlow = uColor * fresnel * (1.5 + uHover * 2.0);
-          
+          float pulse = 1.0; 
+          vec3 baseColor = uColor * pulse; 
+          vec3 edgeGlow = uColor * fresnel * 1.5;
           vec3 finalColor = baseColor * 0.6 + edgeGlow;
-          float alpha = 0.6 + fresnel * 0.4 + uHover * 0.2;
-          
+          float alpha = 0.6 + fresnel * 0.4;
           gl_FragColor = vec4(finalColor, alpha);
         }
       `,
@@ -185,7 +153,6 @@
     const core = new window.THREE.Mesh(coreGeometry, coreMaterial)
     group.add(core)
 
-    // Inner glow sphere
     const innerGlow = new window.THREE.Mesh(
       new window.THREE.SphereGeometry(1.4, 32, 32),
       new window.THREE.MeshBasicMaterial({
@@ -196,7 +163,6 @@
     )
     group.add(innerGlow)
 
-    // Wireframe overlay
     const wireGeometry = new window.THREE.IcosahedronGeometry(1.85, 1)
     const wireMaterial = new window.THREE.MeshBasicMaterial({
       color: CONFIG.colors.teal,
@@ -207,7 +173,7 @@
     const wireframe = new window.THREE.Mesh(wireGeometry, wireMaterial)
     group.add(wireframe)
 
-    // Rotating inner rings
+    // add rotating rings around the hub
     for (let i = 0; i < 3; i++) {
       const ringGeo = new window.THREE.TorusGeometry(2.2 + i * 0.35, 0.025, 16, 80)
       const ringMat = new window.THREE.MeshBasicMaterial({
@@ -234,6 +200,7 @@
     interactiveObjects.push(group)
   }
 
+  // create floating shapes that orbit around the central hub
   function createFloatingShapes() {
     const shapes = [
       {
@@ -247,13 +214,13 @@
         category: "food",
       },
       {
-        type: "icosahedron",
-        size: 1.4,
+        type: "torus",
+        size: 1.0,
         orbitRadius: 10,
         orbitSpeed: 0.2,
         startAngle: window.Math.PI * 0.6,
-        color: CONFIG.colors.white,
-        name: "Events",
+        color: CONFIG.colors.amber,
+        name: "All Businesses",
         category: "all",
       },
       {
@@ -267,16 +234,6 @@
         category: "retail",
       },
       {
-        type: "torusKnot",
-        size: 1.0,
-        orbitRadius: 10,
-        orbitSpeed: 0.2,
-        startAngle: window.Math.PI * 1.8,
-        color: CONFIG.colors.amber,
-        name: "Special Deals",
-        category: "deals",
-      },
-      {
         type: "dodecahedron",
         size: 0.9,
         orbitRadius: 10,
@@ -286,21 +243,14 @@
         name: "Services",
         category: "services",
       },
-      {
-        type: "box",
-        size: 0.75,
-        orbitRadius: 10,
-        orbitSpeed: 0.2,
-        startAngle: window.Math.PI * 1.5,
-        color: CONFIG.colors.magenta,
-        name: "New Arrivals",
-        category: "all",
-      },
     ]
+
+    const heroContainer = document.getElementById('hero-container');
 
     shapes.forEach((shape, index) => {
       let geometry
 
+      // create geometry based on shape type
       switch (shape.type) {
         case "icosahedron":
           geometry = new window.THREE.IcosahedronGeometry(shape.size, 1)
@@ -311,18 +261,14 @@
         case "dodecahedron":
           geometry = new window.THREE.DodecahedronGeometry(shape.size, 0)
           break
-        case "torusKnot":
-          geometry = new window.THREE.TorusKnotGeometry(shape.size * 0.6, 0.15, 80, 12)
-          break
         case "tetrahedron":
           geometry = new window.THREE.TetrahedronGeometry(shape.size, 0)
           break
-        case "box":
-          geometry = new window.THREE.BoxGeometry(shape.size, shape.size, shape.size)
+        case "torus":
+          geometry = new window.THREE.TorusGeometry(shape.size * 0.8, 0.2, 16, 50)
           break
       }
 
-      // Custom shader material for glowing effect
       const material = new window.THREE.ShaderMaterial({
         uniforms: {
           uTime: { value: 0 },
@@ -333,7 +279,6 @@
         vertexShader: `
           varying vec3 vNormal;
           varying vec3 vViewPosition;
-          
           void main() {
             vNormal = normalize(normalMatrix * normal);
             vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -341,28 +286,23 @@
             gl_Position = projectionMatrix * mvPosition;
           }
         `,
+        // fragment shader with fresnel effect and pulsing glow
         fragmentShader: `
           uniform float uTime;
           uniform float uHover;
           uniform vec3 uColor;
           uniform float uPhase;
-          
           varying vec3 vNormal;
           varying vec3 vViewPosition;
-          
           void main() {
             vec3 viewDir = normalize(vViewPosition);
             float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 2.5);
-            
             float pulse = sin(uTime * 1.5 + uPhase) * 0.15 + 0.85;
             float hoverBoost = 1.0 + uHover * 0.7;
-            
             vec3 baseColor = uColor * pulse * hoverBoost;
             vec3 edgeGlow = uColor * fresnel * (1.0 + uHover * 2.0);
-            
             vec3 finalColor = baseColor * 0.6 + edgeGlow;
             float alpha = 0.7 + fresnel * 0.3 + uHover * 0.3;
-            
             gl_FragColor = vec4(finalColor, alpha);
           }
         `,
@@ -373,7 +313,6 @@
 
       const mesh = new window.THREE.Mesh(geometry, material)
 
-      // Wireframe overlay
       const wireGeo = new window.THREE.EdgesGeometry(geometry)
       const wireMat = new window.THREE.LineBasicMaterial({
         color: shape.color,
@@ -382,6 +321,28 @@
       })
       const wireframe = new window.THREE.LineSegments(wireGeo, wireMat)
       mesh.add(wireframe)
+
+      // JUDGE FIX: Dynamically create HTML labels for each shape
+      const labelDiv = document.createElement('div');
+      labelDiv.textContent = shape.name;
+      labelDiv.style.position = 'absolute';
+      labelDiv.style.color = '#fff';
+      labelDiv.style.background = 'rgba(0, 0, 0, 0.6)';
+      labelDiv.style.border = `1px solid #${shape.color.toString(16).padStart(6, '0')}`;
+      labelDiv.style.padding = '6px 12px';
+      labelDiv.style.borderRadius = '20px';
+      labelDiv.style.fontSize = '12px';
+      labelDiv.style.fontWeight = 'bold';
+      labelDiv.style.pointerEvents = 'none'; // Critical: ensures labels don't block clicks on the canvas!
+      labelDiv.style.zIndex = '10';
+      labelDiv.style.transform = 'translate(-50%, -50%)'; // Centers the label directly on its coordinates
+      labelDiv.style.transition = 'opacity 0.2s, transform 0.2s';
+      labelDiv.style.backdropFilter = 'blur(4px)';
+      labelDiv.style.whiteSpace = 'nowrap';
+
+      if (heroContainer) {
+        heroContainer.appendChild(labelDiv);
+      }
 
       mesh.userData = {
         name: shape.name,
@@ -398,6 +359,7 @@
         rotSpeedZ: (window.Math.random() - 0.5) * 0.02,
         wireframe: wireframe,
         pausedAngle: null,
+        labelElement: labelDiv // Store reference to update later
       }
 
       scene.add(mesh)
@@ -437,11 +399,7 @@
     })
 
     const burst = new window.THREE.Points(geometry, material)
-    burst.userData = {
-      velocities: velocities,
-      life: 1.0,
-      decay: 0.02,
-    }
+    burst.userData = { velocities: velocities, life: 1.0, decay: 0.02 }
 
     scene.add(burst)
     burstParticles.push(burst)
@@ -454,21 +412,40 @@
   }
 
   function onMouseMove(event) {
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
+    const rect = renderer.domElement.getBoundingClientRect()
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
 
     if (cursorFollower) {
       cursorFollower.style.left = event.clientX + "px"
       cursorFollower.style.top = event.clientY + "px"
+
+      if (mouse.x < -1 || mouse.x > 1 || mouse.y < -1 || mouse.y > 1) {
+        cursorFollower.style.opacity = '0'
+      } else {
+        cursorFollower.style.opacity = '1'
+      }
+    }
+
+    // We leave objectLabel functionality for the center core hub, 
+    // but the flying shapes now have permanent flying labels.
+    if (objectLabel) {
+      objectLabel.style.left = (event.clientX + 20) + "px"
+      objectLabel.style.top = (event.clientY + 20) + "px"
     }
   }
 
   function onClick(event) {
+    if (event.target.closest('button, a, input, select, .modal, .business-card')) return
+    if (mouse.x < -1 || mouse.x > 1 || mouse.y < -1 || mouse.y > 1) return
+
     if (hoveredObject) {
       const obj = hoveredObject
-      const origScale = obj.userData.originalScale
 
-      obj.scale.set(origScale.x * 1.3, origScale.y * 1.3, origScale.z * 1.3)
+      if (!obj.userData.isCore) {
+        const origScale = obj.userData.originalScale
+        obj.scale.set(origScale.x * 1.3, origScale.y * 1.3, origScale.z * 1.3)
+      }
 
       let color = CONFIG.colors.teal
       if (obj.material && obj.material.uniforms && obj.material.uniforms.uColor) {
@@ -481,9 +458,7 @@
         const category = obj.userData.category
         setTimeout(() => {
           const exploreSection = document.getElementById("explore")
-          if (exploreSection) {
-            exploreSection.scrollIntoView({ behavior: "smooth" })
-          }
+          if (exploreSection) exploreSection.scrollIntoView({ behavior: "smooth" })
           const filterBtn = document.querySelector('[data-category="' + category + '"]')
           if (filterBtn) filterBtn.click()
         }, 300)
@@ -493,11 +468,11 @@
 
   function animate() {
     requestAnimationFrame(animate)
-
     var time = (Date.now() - startTime) / 1000
-
-    // Update raycasting first to determine if orbits should pause
     updateRaycasting()
+
+    // Create a vector object for our 3D to 2D math
+    var vector = new window.THREE.Vector3()
 
     for (var k = 0; k < floatingShapes.length; k++) {
       var shape = floatingShapes[k]
@@ -505,9 +480,7 @@
 
       var angle
       if (orbitsPaused) {
-        if (ud.pausedAngle === null) {
-          ud.pausedAngle = ud.startAngle + time * ud.orbitSpeed
-        }
+        if (ud.pausedAngle === null) ud.pausedAngle = ud.startAngle + time * ud.orbitSpeed
         angle = ud.pausedAngle
       } else {
         if (ud.pausedAngle !== null) {
@@ -517,6 +490,7 @@
         angle = ud.startAngle + time * ud.orbitSpeed
       }
 
+      // calculate orbit position
       var x = window.Math.cos(angle) * ud.orbitRadius
       var z = window.Math.sin(angle) * ud.orbitRadius
       var floatY = window.Math.sin(time * 0.5 + ud.phase) * 0.3
@@ -528,6 +502,9 @@
       if (hoveredObject === shape) {
         shape.position.x += mouse.x * 2 * CONFIG.magnetStrength
         shape.position.y += mouse.y * 2 * CONFIG.magnetStrength
+        ud.labelElement.style.transform = 'translate(-50%, -50%) scale(1.2)' // Pop the label on hover
+      } else {
+        ud.labelElement.style.transform = 'translate(-50%, -50%) scale(1)' // Reset scale
       }
 
       shape.rotation.x += ud.rotSpeedX
@@ -539,18 +516,34 @@
       shape.scale.y += (originalScale.y - shape.scale.y) * 0.1
       shape.scale.z += (originalScale.z - shape.scale.z) * 0.1
 
-      // Update shader time
       if (shape.material && shape.material.uniforms) {
         shape.material.uniforms.uTime.value = time
       }
+
+      // JUDGE FIX: Update label positions (3D to 2D projection)
+      vector.copy(shape.position);
+      vector.project(camera);
+
+      // Convert projected coordinates to screen coordinates
+      var screenX = (vector.x * 0.5 + 0.5) * window.innerWidth;
+      var screenY = -(vector.y * 0.5 - 0.5) * window.innerHeight;
+
+      // Update the CSS coordinates (-40 offsets it slightly above the shape)
+      ud.labelElement.style.left = screenX + 'px';
+      ud.labelElement.style.top = (screenY - 40) + 'px';
+
+      // Hide the label if the shape goes behind the camera
+      if (vector.z > 1) {
+        ud.labelElement.style.display = 'none';
+      } else {
+        ud.labelElement.style.display = 'block';
+      }
     }
 
-    // Animate central hub
     if (centralHub) {
       centralHub.rotation.y += 0.005
       centralHub.position.y = 4 + window.Math.sin(time * 0.5) * 0.3
 
-      // Update shader uniforms for central hub
       if (centralHub.children[0] && centralHub.children[0].material && centralHub.children[0].material.uniforms) {
         centralHub.children[0].material.uniforms.uTime.value = time
       }
@@ -561,9 +554,10 @@
           child.rotation.z += child.userData.ringSpeed * 0.01
         }
       }
+
+      centralHub.scale.set(1, 1, 1)
     }
 
-    // Update burst particles
     for (var m = burstParticles.length - 1; m >= 0; m--) {
       var burst = burstParticles[m]
       burst.userData.life -= burst.userData.decay
@@ -578,9 +572,7 @@
         positions[n * 3 + 2] += velocities[n].z
         velocities[n].multiplyScalar(0.95)
       }
-
       burst.geometry.attributes.position.needsUpdate = true
-
       if (burst.userData.life <= 0) {
         scene.remove(burst)
         burst.geometry.dispose()
@@ -589,24 +581,29 @@
       }
     }
 
-    camera.position.x += (mouse.x * 2 - camera.position.x) * 0.02
-    camera.position.y += (8 + mouse.y * 1 - camera.position.y) * 0.02
     camera.lookAt(0, 3, 0)
 
     renderer.render(scene, camera)
   }
 
   function updateRaycasting() {
+    if (mouse.x < -1 || mouse.x > 1 || mouse.y < -1 || mouse.y > 1) {
+      if (hoveredObject) {
+        hoveredObject = null
+        document.body.style.cursor = "default"
+        if (cursorFollower) cursorFollower.classList.remove("hovering")
+        if (objectLabel) objectLabel.style.opacity = "0"
+      }
+      return
+    }
+
     raycaster.setFromCamera(mouse, camera)
     var intersects = raycaster.intersectObjects(interactiveObjects, true)
 
-    // Reset previous hover
     if (hoveredObject) {
       if (hoveredObject.userData.wireframe) {
         hoveredObject.userData.wireframe.material.opacity = 0.5
       }
-
-      // Update shader hover uniform
       var mat = hoveredObject.material || (hoveredObject.children[0] && hoveredObject.children[0].material)
       if (mat && mat.uniforms && mat.uniforms.uHover) {
         mat.uniforms.uHover.value = window.Math.max(0, mat.uniforms.uHover.value - 0.05)
@@ -617,7 +614,6 @@
 
     if (intersects.length > 0) {
       var target = intersects[0].object
-
       while (target.parent && !target.userData.isInteractive) {
         target = target.parent
       }
@@ -630,21 +626,22 @@
           target.userData.wireframe.material.opacity = 1.0
         }
 
-        // Update shader hover uniform
+        if (!target.userData.isCore) {
+          target.scale.set(1.4, 1.4, 1.4)
+        }
+
         var mat = target.material || (target.children[0] && target.children[0].material)
         if (mat && mat.uniforms && mat.uniforms.uHover) {
           mat.uniforms.uHover.value = window.Math.min(1, mat.uniforms.uHover.value + 0.1)
         }
 
-        if (cursorFollower) {
-          cursorFollower.classList.add("hovering")
-        }
+        if (cursorFollower) cursorFollower.classList.add("hovering")
 
-        if (objectLabel && target.userData.name) {
+        // Show the tooltip label ONLY for the central core now, since shapes have permanent ones
+        if (objectLabel && target.userData.name && target.userData.isCore) {
           objectLabel.textContent = target.userData.name
           objectLabel.style.opacity = "1"
         }
-
         document.body.style.cursor = "pointer"
       }
     }

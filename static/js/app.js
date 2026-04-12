@@ -1,14 +1,17 @@
 class LocalHub {
   constructor() {
-    this.businesses = []; // Holds current zip search results
+    this.businesses = []; // holds current zip search results
     this.currentZip = '';
 
     this.currentCategory = 'all';
     this.currentSort = 'default';
     this.currentSearchText = '';
 
-    // BUG FIX: Store the FULL business objects, not just IDs
+    // store full business objects so saved view works offline
     this.savedBusinesses = JSON.parse(localStorage.getItem('localhub_saved_data')) || [];
+
+    // help chat history stores {role, text} objects for conversation display
+    this.chatHistory = [];
 
     this.init();
   }
@@ -53,20 +56,23 @@ class LocalHub {
       });
     });
 
-    // Handle PDF Report Generation Button
+    // handle pdf report generation button
     const reportBtn = document.getElementById('generate-report-btn');
     if (reportBtn) {
-      reportBtn.addEventListener('click', () => this.generatePDF());
+      reportBtn.addEventListener('click', () => this.generatePdf());
     }
 
-    // Handle Interactive Q&A Help Modal
+    // handle help fab: opens modal and renders chat ui
     const helpFab = document.getElementById('help-fab');
     const helpModal = document.getElementById('help-modal');
     if (helpFab && helpModal) {
-      helpFab.addEventListener('click', () => helpModal.style.display = 'block');
+      helpFab.addEventListener('click', () => {
+        helpModal.style.display = 'block';
+        this.renderHelpChat();
+      });
     }
 
-    // Close Modals
+    // close modals
     document.querySelectorAll('.modal-close').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.target.closest('.modal').style.display = 'none';
@@ -80,21 +86,237 @@ class LocalHub {
     }
   }
 
+  // ─────────────────────────────────────────────
+  // help chat
+  // ─────────────────────────────────────────────
+
+  /**
+   * renders the chat ui into the help modal.
+   * called once when the modal opens. if already rendered, skips re-render.
+   * injects a welcome message on first open.
+   */
+  renderHelpChat() {
+    const modalContent = document.querySelector('#help-modal .modal-content');
+    if (!modalContent) return;
+
+    // only build ui once
+    if (document.getElementById('chat-messages')) {
+      this.scrollChatToBottom();
+      return;
+    }
+
+    modalContent.innerHTML = `
+      <button class="modal-close" aria-label="Close help modal" style="float:right; background:none; border:none; color:white; font-size:1.5rem; cursor:pointer; line-height:1;">&times;</button>
+      <h3 style="margin-top:0; margin-bottom: 4px;">LocalHub Assistant</h3>
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 0; margin-bottom: 16px;">Intelligent Help. Ask me anything about the app</p>
+
+      <div id="chat-messages" style="
+        height: 320px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 12px;
+        background: #0a0a0a;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin-bottom: 12px;
+        scroll-behavior: smooth;
+      "></div>
+
+      <div style="display: flex; gap: 8px;">
+        <input
+          type="text"
+          id="chat-input"
+          placeholder="Ask a question..."
+          aria-label="Type your help question"
+          style="flex: 1; border-radius: 8px;"
+          maxlength="500"
+        />
+        <button id="chat-send-btn" class="btn-primary" style="padding: 12px 20px; font-size: 0.9rem;" aria-label="Send message">
+          Send
+        </button>
+      </div>
+
+      <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;">
+        <span style="font-size: 0.75rem; color: var(--text-secondary); width: 100%; margin-bottom: 2px;">Quick questions:</span>
+        <button class="chat-suggestion" data-q="How do I find businesses near me?">Find businesses</button>
+        <button class="chat-suggestion" data-q="How do I save a favorite business?">Save favorites</button>
+        <button class="chat-suggestion" data-q="How do coupons work?">Coupons</button>
+        <button class="chat-suggestion" data-q="How do I leave a review?">Leave a review</button>
+        <button class="chat-suggestion" data-q="How do I export a PDF report?">Export PDF</button>
+        <button class="chat-suggestion" data-q="What are the floating 3D shapes?">3D shapes</button>
+      </div>
+    `;
+
+    // rebind close button since we replaced innerhtml
+    modalContent.querySelector('.modal-close').addEventListener('click', () => {
+      document.getElementById('help-modal').style.display = 'none';
+    });
+
+    // send button
+    document.getElementById('chat-send-btn').addEventListener('click', () => this.sendHelpMessage());
+
+    // enter key to send
+    document.getElementById('chat-input').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') this.sendHelpMessage();
+    });
+
+    // quick suggestion chips
+    modalContent.querySelectorAll('.chat-suggestion').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById('chat-input').value = btn.dataset.q;
+        this.sendHelpMessage();
+      });
+    });
+
+    // style suggestion chips
+    const styleEl = document.createElement('style');
+    styleEl.textContent = `
+      .chat-suggestion {
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        padding: 5px 10px;
+        border-radius: 20px;
+        cursor: pointer;
+        font-size: 0.78rem;
+        transition: all 0.2s;
+        font-family: var(--font-main);
+      }
+      .chat-suggestion:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .chat-bubble {
+        max-width: 85%;
+        padding: 10px 14px;
+        border-radius: 12px;
+        font-size: 0.88rem;
+        line-height: 1.5;
+        word-wrap: break-word;
+      }
+      .chat-bubble.user {
+        align-self: flex-end;
+        background: var(--accent);
+        color: #000;
+        border-bottom-right-radius: 3px;
+      }
+      .chat-bubble.assistant {
+        align-self: flex-start;
+        background: #1a1a1a;
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        border-bottom-left-radius: 3px;
+      }
+      .chat-bubble.typing {
+        align-self: flex-start;
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-style: italic;
+        border-bottom-left-radius: 3px;
+      }
+    `;
+    document.head.appendChild(styleEl);
+
+    // inject welcome message into history and render it
+    if (this.chatHistory.length === 0) {
+      this.chatHistory.push({
+        role: 'assistant',
+        text: "Hi! I'm the LocalHub Help Assistant. Ask me anything about how to use the app, or tap a quick question below to get started!"
+      });
+    }
+    this.renderChatHistory();
+  }
+
+  /**
+   * renders the full chatHistory array into #chat-messages
+   * called after every new message is added to history
+   */
+  renderChatHistory() {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+
+    container.innerHTML = this.chatHistory.map(msg => `
+      <div class="chat-bubble ${msg.role}">
+        ${this.escapeHTML(msg.text)}
+      </div>
+    `).join('');
+
+    this.scrollChatToBottom();
+  }
+
+  scrollChatToBottom() {
+    const container = document.getElementById('chat-messages');
+    if (container) container.scrollTop = container.scrollHeight;
+  }
+
+  /**
+   * reads chat input, adds user message to history,
+   * shows typing indicator, calls /api/help, then renders reply.
+   */
+  async sendHelpMessage() {
+    const input = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('chat-send-btn');
+    if (!input) return;
+
+    const message = input.value.trim();
+    if (!message) return;
+
+    // add user message to history and clear input
+    this.chatHistory.push({ role: 'user', text: message });
+    input.value = '';
+    sendBtn.disabled = true;
+    sendBtn.textContent = '...';
+
+    // show typing indicator while waiting for response
+    const container = document.getElementById('chat-messages');
+    this.renderChatHistory();
+    if (container) {
+      const typingBubble = document.createElement('div');
+      typingBubble.className = 'chat-bubble typing';
+      typingBubble.id = 'typing-indicator';
+      typingBubble.textContent = 'Assistant is typing…';
+      container.appendChild(typingBubble);
+      this.scrollChatToBottom();
+    }
+
+    try {
+      const res = await fetch('/api/help', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message })
+      });
+
+      const data = await res.json();
+      this.chatHistory.push({ role: 'assistant', text: data.reply });
+    } catch (err) {
+      this.chatHistory.push({
+        role: 'assistant',
+        text: "Sorry, I couldn't connect. Make sure the LocalHub server is running and try again!"
+      });
+    }
+
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send';
+    this.renderChatHistory();
+  }
+
+  // ─────────────────────────────────────────────
+  // search and filter
+  // ─────────────────────────────────────────────
+
   handleSearch(zipValue) {
     const cleanedZip = zipValue.trim();
     const zipInput = document.getElementById('zip-input');
     const grid = document.getElementById('business-grid');
 
-    // --- UPDATED FRONTEND VALIDATION ---
-    // Check if it's NOT 5 digits, OR if it's mathematically under 500
+    // syntax validation (5 digits) + semantic validation (valid US zip range)
     if (!/^\d{5}$/.test(cleanedZip) || parseInt(cleanedZip, 10) < 500) {
-
-      // Turn the outline red using the CSS class
       if (zipInput) {
         zipInput.classList.add('input-error');
       }
-
-      // Inject the red error message specifically (bypassing renderBusinesses)
       if (grid) {
         grid.innerHTML = `
           <div class="empty-state" style="color: #ef4444; padding: 2rem;">
@@ -102,11 +324,9 @@ class LocalHub {
           </div>
         `;
       }
-
-      return; // Stop the function here so it doesn't fetch from the server
+      return;
     }
 
-    // Remove the error class just in case they are fixing a previous typo.
     if (zipInput) {
       zipInput.classList.remove('input-error');
     }
@@ -145,12 +365,12 @@ class LocalHub {
   }
 
   applyFilters() {
-    // determine source array based on category
+    // switch source array based on whether user is viewing saved businesses
     let sourceArray = this.currentCategory === 'saved' ? this.savedBusinesses : this.businesses;
-
     if (!sourceArray) return;
     let result = [...sourceArray];
 
+    // category filter
     if (this.currentCategory !== 'saved' && this.currentCategory !== 'all') {
       result = result.filter(b => {
         const businessCat = (b.category || "").toLowerCase();
@@ -159,7 +379,7 @@ class LocalHub {
       });
     }
 
-    // apply text search
+    // text search filter
     if (this.currentSearchText.trim() !== '') {
       const lowerQuery = this.currentSearchText.toLowerCase();
       result = result.filter(b =>
@@ -168,7 +388,7 @@ class LocalHub {
       );
     }
 
-    // apply sorting
+    // sorting: applied after filtering
     if (this.currentSort === 'rating') {
       result.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     } else if (this.currentSort === 'reviews') {
@@ -180,32 +400,40 @@ class LocalHub {
     this.renderBusinesses(result);
   }
 
+  // ─────────────────────────────────────────────
+  // saved
+  // ─────────────────────────────────────────────
+
   toggleBookmark(id) {
     const savedIndex = this.savedBusinesses.findIndex(b => b.id === id);
 
     if (savedIndex >= 0) {
+      // already saved: remove it
       this.savedBusinesses.splice(savedIndex, 1);
     } else {
-      // find  full object from  current search results and add it
+      // not saved: find full object from current results and persist it
       const businessToSave = this.businesses.find(b => b.id === id);
       if (businessToSave) {
         this.savedBusinesses.push(businessToSave);
       }
     }
 
-    // save  entire array of objects to localStorage
+    // persist entire array of full objects to localStorage
     localStorage.setItem('localhub_saved_data', JSON.stringify(this.savedBusinesses));
     this.applyFilters();
   }
 
-  // generates pdf of saved businesses
+  // ─────────────────────────────────────────────
+  // pdf report
+  // ─────────────────────────────────────────────
+
   generatePdf() {
     if (this.savedBusinesses.length === 0) {
       alert("You haven't saved any businesses yet! Save some local businesses first to generate a report.");
       return;
     }
 
-    // generate formatted html table rows for the pdf
+    // build formatted html table rows for each saved business
     const tableRows = this.savedBusinesses.map(b => `
       <tr>
         <td><strong>${this.escapeHTML(b.name)}</strong></td>
@@ -262,17 +490,21 @@ class LocalHub {
       </html>
     `;
 
-    // open hidden window, write html, and trigger print as pdf dialog
+    // open hidden window, write the html, and trigger browser print to pdf dialog
     const printWindow = window.open('', '_blank', 'width=800,height=600');
     printWindow.document.open();
     printWindow.document.write(pdfHtml);
     printWindow.document.close();
 
-    // wait for styles to load, then print
+    // small delay to allow styles to load before print dialog fires
     setTimeout(() => {
       printWindow.print();
     }, 250);
   }
+
+  // ─────────────────────────────────────────────
+  // rendering
+  // ─────────────────────────────────────────────
 
   escapeHTML(str) {
     if (!str) return '';
@@ -321,6 +553,10 @@ class LocalHub {
           `;
     }).join('');
   }
+
+  // ─────────────────────────────────────────────
+  // bsiness modal
+  // ─────────────────────────────────────────────
 
   async openModal(id) {
     const business = this.businesses.find(b => b.id === id) || this.savedBusinesses.find(b => b.id === id);
@@ -412,6 +648,10 @@ class LocalHub {
     });
   }
 
+  // ─────────────────────────────────────────────
+  // captcha
+  // ─────────────────────────────────────────────
+
   async loadCaptcha(type) {
     const res = await fetch('/api/captcha');
     const data = await res.json();
@@ -428,6 +668,10 @@ class LocalHub {
     const verifyData = await verifyRes.json();
     return verifyData.success;
   }
+
+  // ─────────────────────────────────────────────
+  // review and coupon submission handlers
+  // ─────────────────────────────────────────────
 
   async submitReview(businessId) {
     const answer = document.getElementById('captcha-a-r').value;

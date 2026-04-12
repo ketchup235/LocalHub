@@ -106,7 +106,6 @@ class LocalHub {
       return; // Stop the function here so it doesn't fetch from the server
     }
 
-    // If we made it here, the ZIP is valid! 
     // Remove the error class just in case they are fixing a previous typo.
     if (zipInput) {
       zipInput.classList.remove('input-error');
@@ -146,14 +145,12 @@ class LocalHub {
   }
 
   applyFilters() {
-    // Determine source array based on category
+    // determine source array based on category
     let sourceArray = this.currentCategory === 'saved' ? this.savedBusinesses : this.businesses;
 
     if (!sourceArray) return;
     let result = [...sourceArray];
 
-    // --- THE FIX IS HERE ---
-    // Instead of ===, we use .includes() to catch categories like "Food & Dining"
     if (this.currentCategory !== 'saved' && this.currentCategory !== 'all') {
       result = result.filter(b => {
         const businessCat = (b.category || "").toLowerCase();
@@ -162,7 +159,7 @@ class LocalHub {
       });
     }
 
-    // Apply text search
+    // apply text search
     if (this.currentSearchText.trim() !== '') {
       const lowerQuery = this.currentSearchText.toLowerCase();
       result = result.filter(b =>
@@ -171,7 +168,7 @@ class LocalHub {
       );
     }
 
-    // Apply sorting
+    // apply sorting
     if (this.currentSort === 'rating') {
       result.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     } else if (this.currentSort === 'reviews') {
@@ -184,33 +181,31 @@ class LocalHub {
   }
 
   toggleBookmark(id) {
-    // BUG FIX: Check if it's already saved by finding its index in the objects array
     const savedIndex = this.savedBusinesses.findIndex(b => b.id === id);
 
     if (savedIndex >= 0) {
-      // Remove it if it exists
       this.savedBusinesses.splice(savedIndex, 1);
     } else {
-      // Find the full object from the current search results and add it
+      // find  full object from  current search results and add it
       const businessToSave = this.businesses.find(b => b.id === id);
       if (businessToSave) {
         this.savedBusinesses.push(businessToSave);
       }
     }
 
-    // Save the entire array of objects to localStorage
+    // save  entire array of objects to localStorage
     localStorage.setItem('localhub_saved_data', JSON.stringify(this.savedBusinesses));
     this.applyFilters();
   }
 
-  // PDF GENERATION FEATURE (Replaces CSV)
-  generatePDF() {
+  // generates pdf of saved businesses
+  generatePdf() {
     if (this.savedBusinesses.length === 0) {
       alert("You haven't saved any businesses yet! Save some local businesses first to generate a report.");
       return;
     }
 
-    // Generate formatted HTML table rows for the PDF
+    // generate formatted html table rows for the pdf
     const tableRows = this.savedBusinesses.map(b => `
       <tr>
         <td><strong>${this.escapeHTML(b.name)}</strong></td>
@@ -220,7 +215,6 @@ class LocalHub {
       </tr>
     `).join('');
 
-    // Create a beautiful HTML template for the print window
     const pdfHtml = `
       <html>
         <head>
@@ -268,13 +262,13 @@ class LocalHub {
       </html>
     `;
 
-    // Open a hidden window, write the HTML, and trigger the native Print/Save as PDF dialog
+    // open hidden window, write html, and trigger print as pdf dialog
     const printWindow = window.open('', '_blank', 'width=800,height=600');
     printWindow.document.open();
     printWindow.document.write(pdfHtml);
     printWindow.document.close();
 
-    // Wait for styles to load, then print
+    // wait for styles to load, then print
     setTimeout(() => {
       printWindow.print();
     }, 250);
@@ -300,7 +294,6 @@ class LocalHub {
     }
 
     grid.innerHTML = data.map(business => {
-      // BUG FIX: Check if business object exists in saved array
       const isSaved = this.savedBusinesses.some(saved => saved.id === business.id);
       const heartClass = isSaved ? 'saved' : '';
       const heartIcon = isSaved ? '&#9829;' : '&#9825;';
@@ -330,7 +323,6 @@ class LocalHub {
   }
 
   async openModal(id) {
-    // BUG FIX: Check both arrays so the modal opens even if clicked from the "Saved" tab
     const business = this.businesses.find(b => b.id === id) || this.savedBusinesses.find(b => b.id === id);
     if (!business) return;
 

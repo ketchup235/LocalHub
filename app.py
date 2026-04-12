@@ -135,22 +135,21 @@ def home():
 @app.route('/api/businesses')
 def get_businesses():
     """
-    Main data route. Implements a Persistent Database Hydration logic.
-    Checks the local SQLite directory first for instant loading. If missing, 
-    fetches from API, filters, and permanently saves to the local database.
-    Applies custom review-weighting algorithm before returning to frontend.
+    main data route. implements persistent db hydration logic.
+    checks local SQLite directory first for instant loading. if missing, 
+    fetches from API, filters, and permanently saves to the local db.
+    applies custom review-weighting algorithm before returning to frontend.
     """
     zip_code = request.args.get('zip', '').strip()
     
-    # INPUT VALIDATION: Syntactical check for empty or invalid zip codes
-    # INPUT VALIDATION: Syntactical check for empty, invalid, or impossible zip codes
+    # input validation
     if not zip_code or not re.match(r'^\d{5}$', zip_code) or int(zip_code) < 500:
         return jsonify([])
 
     conn = get_db_connection()
     raw_data = []
 
-    # 1. CHECK SQLITE CACHE FIRST
+    # 1. check sqlite cache
     db_businesses = conn.execute('SELECT * FROM businesses WHERE zip_code = ?', (zip_code,)).fetchall()
 
     if len(db_businesses) > 0:
@@ -163,10 +162,10 @@ def get_businesses():
                 'base_rating': b['base_rating']
             })
     else:
-        # 2. DATA NOT FOUND! Fetch from API
+        # 2. if not found fetch from openstreetmap
         raw_data = fetch_local_data(zip_code)
         
-        # 3. SAVE TO DB FOR NEXT TIME (Hydration)
+        # 3. save to db for next time
         for b in raw_data:
             try:
                 conn.execute(
@@ -174,23 +173,23 @@ def get_businesses():
                     (b['id'], b['name'], b['category'], b['address'], zip_code, b.get('base_rating', 4.0))
                 )
             except sqlite3.IntegrityError:
-                pass # Skip if duplicate
+                pass
         conn.commit()
 
-    # 4. REVIEW AND COUPON LOGIC
+    # 4. reviews and coupons logic
     enhanced_data = []
     
     for b in raw_data:
         business = b.copy()
         b_id = business['id']
 
-        # Review Math
+        # reviews
         reviews = conn.execute('SELECT rating FROM reviews WHERE business_id = ?', (b_id,)).fetchall()
         
         if reviews:
             user_ratings = [r['rating'] for r in reviews]
             avg_user_rating = sum(user_ratings) / len(user_ratings)
-            # Custom weighting algorithm
+            # weighting algorithm
             final_rating = (avg_user_rating * 0.7) + (business['base_rating'] * 0.3)
             business['rating'] = round(final_rating, 1)
             business['review_count'] = len(reviews)
@@ -198,7 +197,7 @@ def get_businesses():
             business['rating'] = business['base_rating']
             business['review_count'] = 0
 
-        # Coupons
+        # coupons
         coupons = conn.execute('SELECT code, discount FROM coupons WHERE business_id = ?', (b_id,)).fetchall()
         business['deals'] = [{"code": c['code'], "discount": c['discount']} for c in coupons]
 
@@ -210,7 +209,7 @@ def get_businesses():
 @app.route('/api/reviews/<id>')
 def get_reviews(id):
     conn = get_db_connection()
-    # Parameterized query protects against SQL Injection
+    # parameterized query stops sql injection attacks
     db_reviews = conn.execute('SELECT user, rating, text, date FROM reviews WHERE business_id = ? ORDER BY id DESC', (id,)).fetchall()
     conn.close()
     
@@ -231,7 +230,7 @@ def add_review():
 def add_coupon():
     data = request.json
     
-    # INPUT VALIDATION: Prevent empty submissions
+    # input validation
     if not data.get('code') or not data.get('discount'):
         return jsonify({"success": False, "error": "Missing fields"})
 
@@ -244,7 +243,7 @@ def add_coupon():
 
 @app.route('/api/captcha')
 def get_captcha():
-    """Generates a dynamic math problem and securely stores the answer in the server session."""
+    # generates a dynamic math problem and stores answer in server session
     num1 = secrets.randbelow(10)
     num2 = secrets.randbelow(10)
     session['captcha_answer'] = num1 + num2
@@ -252,7 +251,7 @@ def get_captcha():
 
 @app.route('/api/verify-captcha', methods=['POST'])
 def verify_captcha():
-    """Provides Semantic Validation by checking user input against the server session truth."""
+    # provides validation by checking user input against the server session truth
     data = request.json
     if 'answer' not in data:
         return jsonify({"success": False})
@@ -263,7 +262,7 @@ def verify_captcha():
         if user_ans == correct_ans:
             return jsonify({"success": True})
     except ValueError:
-        pass # Will fail naturally if user enters text instead of numbers
+        pass
         
     return jsonify({"success": False})
 

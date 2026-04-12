@@ -400,7 +400,6 @@ select:focus {
   margin-bottom: 0.25rem;
 }
 
-/* --- UPDATED EMPTY STATE (Breaks out of grid and centers) --- */
 .empty-state {
   grid-column: 1 / -1;
   width: 100%;
@@ -415,7 +414,6 @@ select:focus {
   padding: 3rem;
 }
 
-/* --- NEW INPUT ERROR UTILITY CLASS --- */
 .input-error {
   border: 2px solid #ef4444 !important;
   outline: none;

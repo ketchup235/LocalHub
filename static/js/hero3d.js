@@ -322,7 +322,6 @@
       const wireframe = new window.THREE.LineSegments(wireGeo, wireMat)
       mesh.add(wireframe)
 
-      // JUDGE FIX: Dynamically create HTML labels for each shape
       const labelDiv = document.createElement('div');
       labelDiv.textContent = shape.name;
       labelDiv.style.position = 'absolute';
@@ -333,9 +332,9 @@
       labelDiv.style.borderRadius = '20px';
       labelDiv.style.fontSize = '12px';
       labelDiv.style.fontWeight = 'bold';
-      labelDiv.style.pointerEvents = 'none'; // Critical: ensures labels don't block clicks on the canvas!
+      labelDiv.style.pointerEvents = 'none';
       labelDiv.style.zIndex = '10';
-      labelDiv.style.transform = 'translate(-50%, -50%)'; // Centers the label directly on its coordinates
+      labelDiv.style.transform = 'translate(-50%, -50%)';
       labelDiv.style.transition = 'opacity 0.2s, transform 0.2s';
       labelDiv.style.backdropFilter = 'blur(4px)';
       labelDiv.style.whiteSpace = 'nowrap';
@@ -359,7 +358,7 @@
         rotSpeedZ: (window.Math.random() - 0.5) * 0.02,
         wireframe: wireframe,
         pausedAngle: null,
-        labelElement: labelDiv // Store reference to update later
+        labelElement: labelDiv
       }
 
       scene.add(mesh)
@@ -426,9 +425,6 @@
         cursorFollower.style.opacity = '1'
       }
     }
-
-    // We leave objectLabel functionality for the center core hub, 
-    // but the flying shapes now have permanent flying labels.
     if (objectLabel) {
       objectLabel.style.left = (event.clientX + 20) + "px"
       objectLabel.style.top = (event.clientY + 20) + "px"
@@ -471,7 +467,7 @@
     var time = (Date.now() - startTime) / 1000
     updateRaycasting()
 
-    // Create a vector object for our 3D to 2D math
+    // create vector object for 3D -> 2D math
     var vector = new window.THREE.Vector3()
 
     for (var k = 0; k < floatingShapes.length; k++) {
@@ -520,19 +516,19 @@
         shape.material.uniforms.uTime.value = time
       }
 
-      // JUDGE FIX: Update label positions (3D to 2D projection)
+      //update label pos
       vector.copy(shape.position);
       vector.project(camera);
 
-      // Convert projected coordinates to screen coordinates
+      // convert projected coordinates to screen coordinates
       var screenX = (vector.x * 0.5 + 0.5) * window.innerWidth;
       var screenY = -(vector.y * 0.5 - 0.5) * window.innerHeight;
 
-      // Update the CSS coordinates (-40 offsets it slightly above the shape)
+      // update css coordinates 
       ud.labelElement.style.left = screenX + 'px';
       ud.labelElement.style.top = (screenY - 40) + 'px';
 
-      // Hide the label if the shape goes behind the camera
+      // hide the label if  shape goes behind camera
       if (vector.z > 1) {
         ud.labelElement.style.display = 'none';
       } else {
@@ -636,8 +632,6 @@
         }
 
         if (cursorFollower) cursorFollower.classList.add("hovering")
-
-        // Show the tooltip label ONLY for the central core now, since shapes have permanent ones
         if (objectLabel && target.userData.name && target.userData.isCore) {
           objectLabel.textContent = target.userData.name
           objectLabel.style.opacity = "1"

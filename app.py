@@ -11,7 +11,7 @@ from datetime import datetime
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
 
-DB_FILE = "localhub.db"
+DB_FILE = "localyze.db"
 
 def init_db():
     """
@@ -51,7 +51,7 @@ def init_db():
 init_db()
 
 def get_db_connection():
-    """opens a db connection and sets row_factory so we get dict-like rows back."""
+    # opens db connection and sets row_factory to get dict-like rows back
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
@@ -75,7 +75,7 @@ def fetch_local_data(location_query):
     try:
         base_url = "https://nominatim.openstreetmap.org/search"
         params = {'q': location_query, 'format': 'json', 'limit': 1, 'countrycodes': 'us'}
-        headers = {'User-Agent': 'FBLA_LocalHub_Project/1.0'}
+        headers = {'User-Agent': 'FBLA_Localyze_Project/1.0'}
         
         req = urllib.request.Request(f"{base_url}?{urllib.parse.urlencode(params)}", headers=headers)
         with urllib.request.urlopen(req) as response:
@@ -137,12 +137,12 @@ def get_help_response(message):
     gives a friendly fallback with suggestions.
 
     intent order (most specific first):
-      1. 3d shapes / hero interaction
-      2. captcha / bot verification
+      1. 3d shapes/hero interaction
+      2. captcha/bot verification
       3. coupons
-      4. pdf / report export
-      5. reviews / ratings
-      6. saving / bookmarking
+      4. pdf/report export
+      5. reviews/ratings
+      6. saving/bookmarking
       7. sorting
       8. category filtering
       9. searching by zip
@@ -159,7 +159,7 @@ def get_help_response(message):
 
     # captcha / spam prevention
     if any(w in msg for w in ["captcha", "bot", "verification", "verify", "human", "math", "robot", "spam", "prove"]):
-        return ("To prevent spam, LocalHub uses a simple math CAPTCHA. When leaving a review or "
+        return ("To prevent spam, Localyze uses a simple math CAPTCHA. When leaving a review or "
                 "submitting a coupon, you'll see a quick addition problem like '3 + 5 = ?'. "
                 "Just type the number answer and submit. It refreshes each time you open the form.")
 
@@ -195,7 +195,7 @@ def get_help_response(message):
     if any(w in msg for w in ["sort", "order", "rank", "top rated", "best", "most reviewed", "alphabetical", "a-z", "highest"]):
         return ("Use the 'Sort By' dropdown in the filter bar to reorder results. "
                 "Options are: Top Rated (highest community rating first), "
-                "Most Reviewed (most LocalHub reviews first), and Name A-Z (alphabetical). "
+                "Most Reviewed (most Localyze reviews first), and Name A-Z (alphabetical). "
                 "Sorting works together with category filters and name search simultaneously.")
 
     # category filtering
@@ -208,13 +208,13 @@ def get_help_response(message):
     # searching by zip code
     if any(w in msg for w in ["search", "zip", "find", "locate", "area", "nearby", "local", "postcode", "where", "how do i start", "begin", "get started"]):
         return ("Enter your 5-digit US zip code in the search bar at the top of the page and click Search "
-                "or press Enter. LocalHub fetches real verified businesses near that area using "
+                "or press Enter. Localyze fetches real verified businesses near that area using "
                 "OpenStreetMap data. Results are cached locally so repeat searches for the same "
                 "zip code load instantly. Only independent local businesses are shown — chains are filtered out!")
 
     # general greeting
     if any(w in msg for w in ["hi", "hello", "hey", "help", "what can you do", "what do you do", "sup", "yo", "howdy"]):
-        return ("Hi! I'm the LocalHub Help Assistant. I can answer questions about how to use the app. "
+        return ("Hi! I'm the pornhub Help Assistant. I can answer questions about how to use the app. "
                 "Try asking me things like: 'How do I find businesses?', 'How do I save a favorite?', "
                 "'How do coupons work?', or 'How do I leave a review?'")
 
@@ -232,7 +232,7 @@ def home():
 @app.route('/api/businesses')
 def get_businesses():
     """
-    main data route. checks the sqlite cache first — if we've seen this zip
+    main data route. checks the sqlite cache first. if we've seen this zip
     before, we return it instantly. otherwise we fetch from openstreetmap,
     save the results, then enrich everything with reviews and coupons before
     sending it back to the frontend.

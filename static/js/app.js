@@ -1,4 +1,4 @@
-class LocalHub {
+class Localyze {
   constructor() {
     this.businesses = []; // holds current zip search results
     this.currentZip = '';
@@ -8,7 +8,7 @@ class LocalHub {
     this.currentSearchText = '';
 
     // store full business objects so saved view works offline
-    this.savedBusinesses = JSON.parse(localStorage.getItem('localhub_saved_data')) || [];
+    this.savedBusinesses = JSON.parse(localStorage.getItem('localyze_saved_data')) || [];
 
     // help chat history stores {role, text} objects for conversation display
     this.chatHistory = [];
@@ -107,7 +107,7 @@ class LocalHub {
 
     modalContent.innerHTML = `
       <button class="modal-close" aria-label="Close help modal" style="float:right; background:none; border:none; color:white; font-size:1.5rem; cursor:pointer; line-height:1;">&times;</button>
-      <h3 style="margin-top:0; margin-bottom: 4px;">LocalHub Assistant</h3>
+      <h3 style="margin-top:0; margin-bottom: 4px;">Localyze Assistant</h3>
       <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 0; margin-bottom: 16px;">Intelligent Help. Ask me anything about the app</p>
 
       <div id="chat-messages" style="
@@ -224,7 +224,7 @@ class LocalHub {
     if (this.chatHistory.length === 0) {
       this.chatHistory.push({
         role: 'assistant',
-        text: "Hi! I'm the LocalHub Help Assistant. Ask me anything about how to use the app, or tap a quick question below to get started!"
+        text: "Hi! I'm the Localyze Help Assistant. Ask me anything about how to use the app, or tap a quick question below to get started!"
       });
     }
     this.renderChatHistory();
@@ -294,7 +294,7 @@ class LocalHub {
     } catch (err) {
       this.chatHistory.push({
         role: 'assistant',
-        text: "Sorry, I couldn't connect. Make sure the LocalHub server is running and try again!"
+        text: "Sorry, I couldn't connect. Make sure the Localyze server is running and try again!"
       });
     }
 
@@ -419,7 +419,7 @@ class LocalHub {
     }
 
     // persist entire array of full objects to localStorage
-    localStorage.setItem('localhub_saved_data', JSON.stringify(this.savedBusinesses));
+    localStorage.setItem('localyze_saved_data', JSON.stringify(this.savedBusinesses));
     this.applyFilters();
   }
 
@@ -438,7 +438,7 @@ class LocalHub {
       <tr>
         <td><strong>${this.escapeHTML(b.name)}</strong></td>
         <td class="category">${this.escapeHTML(b.category)}</td>
-        <td>${b.rating} ⭐ (${b.review_count} reviews on LocalHub)</td>
+        <td>${b.rating} ⭐ (${b.review_count} reviews on Localyze)</td>
         <td>${this.escapeHTML(b.address)}</td>
       </tr>
     `).join('');
@@ -446,7 +446,7 @@ class LocalHub {
     const pdfHtml = `
       <html>
         <head>
-          <title>LocalHub - My Saved Directory</title>
+          <title>Localyze - My Saved Directory</title>
           <style>
             body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #222; padding: 40px; margin: 0; }
             .header { text-align: center; border-bottom: 3px solid #10b981; padding-bottom: 20px; margin-bottom: 30px; }
@@ -465,7 +465,7 @@ class LocalHub {
         </head>
         <body>
           <div class="header">
-            <h1 class="title">LocalHub</h1>
+            <h1 class="title">Localyze</h1>
             <p class="subtitle">Your Guide to Local Businesses</p>
             <p style="font-size: 12px; color: #888;">Generated on: ${new Date().toLocaleDateString()}</p>
           </div>
@@ -484,7 +484,7 @@ class LocalHub {
           </table>
           <div class="footer">
             <p>Thank you for supporting small businesses and your local community.</p>
-            <p><strong>localhub.app</strong></p>
+            <p><strong>localyze.app</strong></p>
           </div>
         </body>
       </html>
@@ -734,5 +734,5 @@ class LocalHub {
 
 window.app = null;
 document.addEventListener('DOMContentLoaded', () => {
-  window.app = new LocalHub();
+  window.app = new Localyze();
 });

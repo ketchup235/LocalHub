@@ -60,6 +60,14 @@ class Localyze {
     const reportBtn = document.getElementById('generate-report-btn');
     if (reportBtn) {
       reportBtn.addEventListener('click', () => this.generatePdf());
+
+      if (!document.getElementById('report-feedback')) {
+        const feedback = document.createElement('p');
+        feedback.id = 'report-feedback';
+        feedback.className = 'inline-feedback';
+        feedback.setAttribute('aria-live', 'polite');
+        reportBtn.insertAdjacentElement('afterend', feedback);
+      }
     }
 
     // handle help fab: opens modal and renders chat ui
@@ -106,7 +114,7 @@ class Localyze {
     }
 
     modalContent.innerHTML = `
-      <button class="modal-close" aria-label="Close help modal" style="float:right; background:none; border:none; color:white; font-size:1.5rem; cursor:pointer; line-height:1;">&times;</button>
+      <button class="modal-close" aria-label="Close help modal">&times;</button>
       <h3 style="margin-top:0; margin-bottom: 4px;">Localyze Assistant</h3>
       <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 0; margin-bottom: 16px;">Intelligent Help. Ask me anything about the app</p>
 
@@ -427,6 +435,31 @@ class Localyze {
   // pdf report
   // ─────────────────────────────────────────────
 
+  showFieldError(inputId, errorId, message) {
+    const input = document.getElementById(inputId);
+    const errorEl = document.getElementById(errorId);
+
+    if (input) input.classList.add('input-error');
+    if (errorEl) errorEl.innerText = message;
+  }
+
+  clearFieldError(inputId, errorId) {
+    const input = document.getElementById(inputId);
+    const errorEl = document.getElementById(errorId);
+
+    if (input) input.classList.remove('input-error');
+    if (errorEl) errorEl.innerText = '';
+  }
+
+  setReportFeedback(message, type = 'error') {
+    const feedback = document.getElementById('report-feedback');
+    if (!feedback) return;
+
+    feedback.innerText = message;
+    feedback.classList.remove('error', 'success');
+    feedback.classList.add(type);
+  }
+
   /**
    * shows a customization modal asking the user to pick a category filter
    * and sort order before generating the report. once they confirm, calls
@@ -434,9 +467,11 @@ class Localyze {
    */
   generatePdf() {
     if (this.savedBusinesses.length === 0) {
-      alert("You haven't saved any businesses yet! Save some local businesses first to generate a report.");
+      this.setReportFeedback("You haven't saved any businesses yet! Save some local businesses first to generate a report.", 'error');
       return;
     }
+
+    this.setReportFeedback('', 'error');
 
     // build and inject the pdf options modal if it doesn't exist yet
     if (!document.getElementById('pdf-options-modal')) {
@@ -458,6 +493,7 @@ class Localyze {
             <option value="retail">Retail Only</option>
             <option value="services">Services Only</option>
           </select>
+          <p id="pdf-category-error" class="field-error-message"></p>
 
           <label style="display:block; margin-bottom: 6px; font-weight: 600; font-size: 0.9rem;">Sort Order</label>
           <select id="pdf-sort-select" aria-label="Sort PDF report" style="width: 100%; margin-bottom: 24px;">
@@ -486,20 +522,24 @@ class Localyze {
       document.getElementById('pdf-confirm-btn').addEventListener('click', () => {
         const categoryFilter = document.getElementById('pdf-category-select').value;
         const sortOrder = document.getElementById('pdf-sort-select').value;
-        modalEl.style.display = 'none';
-        this.buildAndPrintPdf(categoryFilter, sortOrder);
+        this.buildAndPrintPdf(categoryFilter, sortOrder, modalEl);
+      });
+
+      document.getElementById('pdf-category-select').addEventListener('change', () => {
+        this.clearFieldError('pdf-category-select', 'pdf-category-error');
       });
     }
 
     // show the modal
     document.getElementById('pdf-options-modal').style.display = 'block';
+    this.clearFieldError('pdf-category-select', 'pdf-category-error');
   }
 
   /**
    * takes the user's chosen category and sort order, filters and sorts
-   * the saved businesses array, then opens a styled print window.
+    * the saved businesses array, then opens a styled print window.
    */
-  buildAndPrintPdf(categoryFilter, sortOrder) {
+  buildAndPrintPdf(categoryFilter, sortOrder, modalEl) {
     // apply category filter
     let reportData = [...this.savedBusinesses];
 
@@ -518,9 +558,12 @@ class Localyze {
 
     // nothing left after filtering — tell the user instead of printing a blank page
     if (reportData.length === 0) {
-      alert(`No saved businesses in the "${categoryFilter}" category. Try a different filter.`);
+      this.showFieldError('pdf-category-select', 'pdf-category-error', `No saved businesses in the "${categoryFilter}" category. Try a different filter.`);
       return;
     }
+
+    this.clearFieldError('pdf-category-select', 'pdf-category-error');
+    if (modalEl) modalEl.style.display = 'none';
 
     // human-readable labels for the report header
     const categoryLabel = categoryFilter === 'all' ? 'All Categories' : categoryFilter.charAt(0).toUpperCase() + categoryFilter.slice(1);
@@ -688,11 +731,20 @@ class Localyze {
           
           <div id="coupon-form-container" style="display:none; margin-top:15px; background:#111; padding:15px; border-radius:8px; border:1px solid #333;">
               <h4>Share a Coupon</h4>
-              <input type="text" id="coupon-code" placeholder="Coupon Code (e.g. SAVE10)" required>
-              <input type="text" id="coupon-desc" placeholder="What does it do? (e.g. 10% Off)" required>
+              <div class="coupon-input-row">
+                <div class="coupon-field">
+                  <input type="text" id="coupon-code" placeholder="Coupon Code" required>
+                  <p id="coupon-code-error" class="field-error-message"></p>
+                </div>
+                <div class="coupon-field">
+                  <input type="text" id="coupon-desc" placeholder="Description" required>
+                  <p id="coupon-desc-error" class="field-error-message"></p>
+                </div>
+              </div>
               <div class="captcha-section">
                   <p id="captcha-q-c">Loading...</p>
                   <input type="text" id="captcha-a-c" placeholder="Math Answer">
+                <p id="captcha-error-c" class="captcha-error-message"></p>
               </div>
               <button id="submit-coupon-btn" class="btn-primary" style="width:100%; margin-top:10px;">Submit Coupon</button>
           </div>
@@ -704,7 +756,8 @@ class Localyze {
           
           <h4 style="margin-top:20px">Leave a Review</h4>
           <form id="review-form">
-              <input type="text" id="review-user" placeholder="Your Name" required>
+              <input type="text" id="review-user" placeholder="Your Name">
+              <p id="review-user-error" class="field-error-message"></p>
               <select id="review-rating">
                   <option value="5">5 Stars</option>
                   <option value="4">4 Stars</option>
@@ -712,11 +765,13 @@ class Localyze {
                   <option value="2">2 Stars</option>
                   <option value="1">1 Star</option>
               </select>
-              <textarea id="review-text" placeholder="Share your experience..." required></textarea>
+              <textarea id="review-text" placeholder="Share your experience..."></textarea>
+              <p id="review-text-error" class="field-error-message"></p>
               
               <div class="captcha-section">
                   <p id="captcha-q-r">Loading...</p>
-                  <input type="text" id="captcha-a-r" placeholder="Math Answer" required>
+                <input type="text" id="captcha-a-r" placeholder="Math Answer">
+                  <p id="captcha-error-r" class="captcha-error-message"></p>
               </div>
               
               <button type="submit" class="btn-primary">Submit Review</button>
@@ -741,6 +796,27 @@ class Localyze {
       e.preventDefault();
       this.submitReview(id);
     });
+
+    ['c', 'r'].forEach((type) => {
+      const input = document.getElementById(`captcha-a-${type}`);
+      if (input) {
+        input.addEventListener('input', () => this.clearCaptchaError(type));
+      }
+    });
+
+    ['coupon-code', 'coupon-desc'].forEach((id) => {
+      const input = document.getElementById(id);
+      if (input) {
+        input.addEventListener('input', () => this.clearFieldError(id, `${id}-error`));
+      }
+    });
+
+    ['review-user', 'review-text'].forEach((id) => {
+      const input = document.getElementById(id);
+      if (input) {
+        input.addEventListener('input', () => this.clearFieldError(id, `${id}-error`));
+      }
+    });
   }
 
   // ─────────────────────────────────────────────
@@ -752,6 +828,23 @@ class Localyze {
     const data = await res.json();
     const el = document.getElementById(`captcha-q-${type}`);
     if (el) el.innerText = data.question + " = ?";
+    this.clearCaptchaError(type);
+  }
+
+  clearCaptchaError(type) {
+    const captchaInput = document.getElementById(`captcha-a-${type}`);
+    const captchaError = document.getElementById(`captcha-error-${type}`);
+
+    if (captchaInput) captchaInput.classList.remove('input-error');
+    if (captchaError) captchaError.innerText = '';
+  }
+
+  showCaptchaError(type) {
+    const captchaInput = document.getElementById(`captcha-a-${type}`);
+    const captchaError = document.getElementById(`captcha-error-${type}`);
+
+    if (captchaInput) captchaInput.classList.add('input-error');
+    if (captchaError) captchaError.innerText = 'Incorrect Math Answer';
   }
 
   async verifyCaptcha(answer) {
@@ -769,19 +862,49 @@ class Localyze {
   // ─────────────────────────────────────────────
 
   async submitReview(businessId) {
-    const answer = document.getElementById('captcha-a-r').value;
-    const isHuman = await this.verifyCaptcha(answer);
+    const user = document.getElementById('review-user').value.trim();
+    const text = document.getElementById('review-text').value.trim();
+    const answer = document.getElementById('captcha-a-r').value.trim();
 
-    if (!isHuman) {
-      alert("Incorrect Math Answer! Please prove you are human.");
+    let hasErrors = false;
+
+    if (!user) {
+      this.showFieldError('review-user', 'review-user-error', 'Your name is required.');
+      hasErrors = true;
+    } else {
+      this.clearFieldError('review-user', 'review-user-error');
+    }
+
+    if (!text) {
+      this.showFieldError('review-text', 'review-text-error', 'Review text is required.');
+      hasErrors = true;
+    } else {
+      this.clearFieldError('review-text', 'review-text-error');
+    }
+
+    if (!answer) {
+      this.showCaptchaError('r');
+      hasErrors = true;
+    }
+
+    if (hasErrors) {
       return;
     }
 
+    const isHuman = await this.verifyCaptcha(answer);
+
+    if (!isHuman) {
+      this.showCaptchaError('r');
+      return;
+    }
+
+    this.clearCaptchaError('r');
+
     const reviewData = {
       businessId: businessId,
-      user: document.getElementById('review-user').value,
+      user: user,
       rating: document.getElementById('review-rating').value,
-      text: document.getElementById('review-text').value
+      text: text
     };
 
     await fetch('/api/review', {
@@ -790,26 +913,41 @@ class Localyze {
       body: JSON.stringify(reviewData)
     });
 
-    alert("Review Submitted! Thank you for supporting local.");
     document.getElementById('business-modal').style.display = 'none';
     this.loadBusinesses();
   }
 
   async submitCoupon(businessId) {
     const answer = document.getElementById('captcha-a-c').value;
-    const code = document.getElementById('coupon-code').value;
-    const disc = document.getElementById('coupon-desc').value;
+    const code = document.getElementById('coupon-code').value.trim();
+    const disc = document.getElementById('coupon-desc').value.trim();
 
-    if (!code || !disc) {
-      alert("Please fill in coupon details");
+    let hasErrors = false;
+    if (!code) {
+      this.showFieldError('coupon-code', 'coupon-code-error', 'Coupon code is required.');
+      hasErrors = true;
+    } else {
+      this.clearFieldError('coupon-code', 'coupon-code-error');
+    }
+
+    if (!disc) {
+      this.showFieldError('coupon-desc', 'coupon-desc-error', 'Coupon description is required.');
+      hasErrors = true;
+    } else {
+      this.clearFieldError('coupon-desc', 'coupon-desc-error');
+    }
+
+    if (hasErrors) {
       return;
     }
 
     const isHuman = await this.verifyCaptcha(answer);
     if (!isHuman) {
-      alert("Incorrect Math Answer! Please prove you are human.");
+      this.showCaptchaError('c');
       return;
     }
+
+    this.clearCaptchaError('c');
 
     await fetch('/api/coupon', {
       method: 'POST',
@@ -821,7 +959,6 @@ class Localyze {
       })
     });
 
-    alert("Coupon Shared! Thank you for supporting the community.");
     document.getElementById('business-modal').style.display = 'none';
     this.loadBusinesses();
   }

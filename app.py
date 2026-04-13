@@ -64,7 +64,7 @@ def fetch_local_data(location_query):
     """
     businesses = []
     
-    # anything in here gets thrown out — we only want mom and pop places
+    # anything in here gets removed. we only want local places
     CHAIN_BLACKLIST = [
         "pizza hut", "mcdonald", "burger king", "subway", "starbucks", "dunkin", 
         "domino", "taco bell", "wendy", "cvs", "walgreens", "rite aid", "walmart", 

@@ -427,14 +427,107 @@ class Localyze {
   // pdf report
   // ─────────────────────────────────────────────
 
+  /**
+   * shows a customization modal asking the user to pick a category filter
+   * and sort order before generating the report. once they confirm, calls
+   * buildAndPrintPdf with their selections.
+   */
   generatePdf() {
     if (this.savedBusinesses.length === 0) {
       alert("You haven't saved any businesses yet! Save some local businesses first to generate a report.");
       return;
     }
 
-    // build formatted html table rows for each saved business
-    const tableRows = this.savedBusinesses.map(b => `
+    // build and inject the pdf options modal if it doesn't exist yet
+    if (!document.getElementById('pdf-options-modal')) {
+      const modalEl = document.createElement('div');
+      modalEl.id = 'pdf-options-modal';
+      modalEl.className = 'modal';
+      modalEl.setAttribute('role', 'dialog');
+      modalEl.setAttribute('aria-modal', 'true');
+      modalEl.innerHTML = `
+        <div class="modal-content" style="max-width: 420px;">
+          <button class="modal-close" aria-label="Close PDF options">&times;</button>
+          <h3 style="margin-top: 0;">Customize Your Report</h3>
+          <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Choose what to include before we generate your PDF.</p>
+
+          <label style="display:block; margin-bottom: 6px; font-weight: 600; font-size: 0.9rem;">Filter by Category</label>
+          <select id="pdf-category-select" aria-label="Filter PDF by category" style="width: 100%; margin-bottom: 16px;">
+            <option value="all">All Categories</option>
+            <option value="food">Food Only</option>
+            <option value="retail">Retail Only</option>
+            <option value="services">Services Only</option>
+          </select>
+
+          <label style="display:block; margin-bottom: 6px; font-weight: 600; font-size: 0.9rem;">Sort Order</label>
+          <select id="pdf-sort-select" aria-label="Sort PDF report" style="width: 100%; margin-bottom: 24px;">
+            <option value="default">Default Order</option>
+            <option value="rating">Top Rated First</option>
+            <option value="name">Name A-Z</option>
+            <option value="category">Group by Category</option>
+          </select>
+
+          <button id="pdf-confirm-btn" class="btn-primary" style="width: 100%;">Generate PDF</button>
+        </div>
+      `;
+      document.body.appendChild(modalEl);
+
+      // close on backdrop click
+      modalEl.addEventListener('click', (e) => {
+        if (e.target === modalEl) modalEl.style.display = 'none';
+      });
+
+      // close button
+      modalEl.querySelector('.modal-close').addEventListener('click', () => {
+        modalEl.style.display = 'none';
+      });
+
+      // confirm button: read selections and build the pdf
+      document.getElementById('pdf-confirm-btn').addEventListener('click', () => {
+        const categoryFilter = document.getElementById('pdf-category-select').value;
+        const sortOrder = document.getElementById('pdf-sort-select').value;
+        modalEl.style.display = 'none';
+        this.buildAndPrintPdf(categoryFilter, sortOrder);
+      });
+    }
+
+    // show the modal
+    document.getElementById('pdf-options-modal').style.display = 'block';
+  }
+
+  /**
+   * takes the user's chosen category and sort order, filters and sorts
+   * the saved businesses array, then opens a styled print window.
+   */
+  buildAndPrintPdf(categoryFilter, sortOrder) {
+    // apply category filter
+    let reportData = [...this.savedBusinesses];
+
+    if (categoryFilter !== 'all') {
+      reportData = reportData.filter(b => b.category?.toLowerCase() === categoryFilter);
+    }
+
+    // apply sort order
+    if (sortOrder === 'rating') {
+      reportData.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    } else if (sortOrder === 'name') {
+      reportData.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    } else if (sortOrder === 'category') {
+      reportData.sort((a, b) => (a.category || '').localeCompare(b.category || ''));
+    }
+
+    // nothing left after filtering — tell the user instead of printing a blank page
+    if (reportData.length === 0) {
+      alert(`No saved businesses in the "${categoryFilter}" category. Try a different filter.`);
+      return;
+    }
+
+    // human-readable labels for the report header
+    const categoryLabel = categoryFilter === 'all' ? 'All Categories' : categoryFilter.charAt(0).toUpperCase() + categoryFilter.slice(1);
+    const sortLabel = { default: 'Default Order', rating: 'Top Rated First', name: 'Name A-Z', category: 'Grouped by Category' }[sortOrder];
+
+    // build formatted html table rows for each business in the report
+    const tableRows = reportData.map(b => `
       <tr>
         <td><strong>${this.escapeHTML(b.name)}</strong></td>
         <td class="category">${this.escapeHTML(b.category)}</td>
@@ -452,6 +545,7 @@ class Localyze {
             .header { text-align: center; border-bottom: 3px solid #10b981; padding-bottom: 20px; margin-bottom: 30px; }
             .title { font-size: 32px; font-weight: 800; color: #000; margin: 0; }
             .subtitle { font-size: 16px; color: #555; margin-top: 5px; }
+            .meta { font-size: 12px; color: #888; margin-top: 4px; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
             th, td { padding: 15px; text-align: left; border-bottom: 1px solid #ddd; }
             th { background-color: #f8f9fa; font-weight: bold; color: #333; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
@@ -467,7 +561,8 @@ class Localyze {
           <div class="header">
             <h1 class="title">Localyze</h1>
             <p class="subtitle">Your Guide to Local Businesses</p>
-            <p style="font-size: 12px; color: #888;">Generated on: ${new Date().toLocaleDateString()}</p>
+            <p class="meta">Category: ${categoryLabel} &nbsp;|&nbsp; Sorted: ${sortLabel}</p>
+            <p class="meta">Generated on: ${new Date().toLocaleDateString()} &nbsp;|&nbsp; ${reportData.length} business${reportData.length !== 1 ? 'es' : ''}</p>
           </div>
           <table>
             <thead>
